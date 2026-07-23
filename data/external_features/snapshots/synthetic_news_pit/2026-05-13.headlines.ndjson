@@ -1,0 +1,6 @@
+{"engine_code": "mock@1.0", "engine_score": -0.327502, "headline": "synthetic-AAPL-0", "release_ts": "2026-05-13T00:00:00Z", "source": "SyntheticNewsPIT", "ticker": "AAPL", "url": ""}
+{"engine_code": "mock@1.0", "engine_score": -0.277502, "headline": "synthetic-AAPL-1", "release_ts": "2026-05-12T00:00:00Z", "source": "SyntheticNewsPIT", "ticker": "AAPL", "url": ""}
+{"engine_code": "mock@1.0", "engine_score": -0.227502, "headline": "synthetic-AAPL-2", "release_ts": "2026-05-11T00:00:00Z", "source": "SyntheticNewsPIT", "ticker": "AAPL", "url": ""}
+{"engine_code": "mock@1.0", "engine_score": 0.071389, "headline": "synthetic-MSFT-0", "release_ts": "2026-05-13T00:00:00Z", "source": "SyntheticNewsPIT", "ticker": "MSFT", "url": ""}
+{"engine_code": "mock@1.0", "engine_score": 0.121389, "headline": "synthetic-MSFT-1", "release_ts": "2026-05-12T00:00:00Z", "source": "SyntheticNewsPIT", "ticker": "MSFT", "url": ""}
+{"engine_code": "mock@1.0", "engine_score": 0.171389, "headline": "synthetic-MSFT-2", "release_ts": "2026-05-11T00:00:00Z", "source": "SyntheticNewsPIT", "ticker": "MSFT", "url": ""}

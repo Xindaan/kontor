@@ -1,0 +1,981 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="batchOptimize()" class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Batch Optimization</h1>
+            <p class="text-sm text-gray-500 mt-1">Optimize parameters for multiple strategies using predefined grids</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Form -->
+        <div class="lg:col-span-1">
+            <form @submit.prevent="runBatchOptimize" novalidate class="card">
+                <div class="px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Configuration</h2>
+                </div>
+
+                <div class="p-6 space-y-4">
+                    <!-- Strategy Selection -->
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="block text-sm font-medium text-gray-700">Strategies</label>
+                            <div class="text-xs space-x-2">
+                                <button type="button" @click="selectAll" class="text-blue-600 hover:text-blue-800">Select All</button>
+                                <span class="text-gray-300">|</span>
+                                <button type="button" @click="deselectAll" class="text-blue-600 hover:text-blue-800">Deselect All</button>
+                            </div>
+                        </div>
+                        <div class="border rounded-md max-h-64 overflow-y-auto">
+                            {% for strategy in strategies %}
+                            <label class="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0">
+                                <input type="checkbox" value="{{ strategy.file_path }}" x-model="form.strategies"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span class="ml-2 text-sm text-gray-700">{{ strategy.name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            <span x-text="form.strategies.length"></span> selected
+                        </p>
+                    </div>
+
+                    <!-- Info about predefined grids -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-md p-3">
+                        <p class="text-xs text-blue-700">
+                            <strong>Note:</strong> Batch optimization uses predefined parameter grids for each strategy type.
+                            The grids are optimized for common use cases.
+                        </p>
+                    </div>
+
+                    <!-- Rebalance Frequencies -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Rebalance Frequencies</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" value="daily" x-model="form.rebalance_frequencies"
+                                       class="rounded border-gray-300 text-blue-600">
+                                <span class="text-sm">Daily</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" value="weekly" x-model="form.rebalance_frequencies"
+                                       class="rounded border-gray-300 text-blue-600">
+                                <span class="text-sm">Weekly</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" value="monthly" x-model="form.rebalance_frequencies"
+                                       class="rounded border-gray-300 text-blue-600">
+                                <span class="text-sm">Monthly</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" value="quarterly" x-model="form.rebalance_frequencies"
+                                       class="rounded border-gray-300 text-blue-600">
+                                <span class="text-sm">Quarterly</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" value="yearly" x-model="form.rebalance_frequencies"
+                                       class="rounded border-gray-300 text-blue-600">
+                                <span class="text-sm">Yearly</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Optimization Settings -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Optimization Target</h3>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Metric</label>
+                                <select x-model="form.metric"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="sharpe_ratio">Sharpe Ratio</option>
+                                    <option value="sortino_ratio">Sortino Ratio</option>
+                                    <option value="cagr">CAGR</option>
+                                    <option value="calmar_ratio">Calmar Ratio</option>
+                                    <option value="max_drawdown">Max Drawdown</option>
+                                    <option value="volatility">Volatility</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Direction</label>
+                                <select x-model="form.minimize"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="false">Maximize</option>
+                                    <option value="true">Minimize</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Date Range & Capital -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Backtest Settings</h3>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Start Date</label>
+                                <input type="date" x-model="form.start_date"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">End Date</label>
+                                <input type="date" x-model="form.end_date"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 mt-3">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Capital</label>
+                                <input type="number" x-model.number="form.initial_capital" min="100" step="1000"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Metric Basis</label>
+                                <select x-model="form.metric_basis"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="gross">Gross</option>
+                                    <option value="net_realized">Net Realized</option>
+                                    <option value="net_liquidation">Net Liquidation</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Walk-Forward Analysis -->
+                    <div class="border-t pt-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-700">Walk-Forward Analysis</h3>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" x-model="form.walk_forward" class="sr-only peer">
+                                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+                        <div x-show="form.walk_forward" x-collapse class="space-y-3">
+                            <div class="bg-amber-50 border border-amber-200 rounded-md p-3 mb-3">
+                                <p class="text-xs text-amber-700">
+                                    <strong>Walk-Forward:</strong> Validates parameters on out-of-sample data to detect overfitting.
+                                    Takes longer but produces more robust results.
+                                </p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Train Window (years)</label>
+                                    <input type="number" x-model.number="form.wf_train_years" step="0.5" min="1" max="20"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Test Window (years)</label>
+                                    <input type="number" x-model.number="form.wf_test_years" step="0.5" min="0.5" max="5"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Step (months)</label>
+                                    <input type="number" x-model.number="form.wf_step_months" min="1" max="24"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div class="flex items-end">
+                                    <label class="flex items-center mb-2">
+                                        <input type="checkbox" x-model="form.wf_anchored"
+                                               class="rounded border-gray-300 text-blue-600">
+                                        <span class="ml-2 text-sm text-gray-700">Anchored windows</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="border-t pt-3">
+                                <label class="flex items-center mb-2">
+                                    <input type="checkbox" x-model="form.walk_forward_nested"
+                                           class="rounded border-gray-300 text-blue-600">
+                                    <span class="ml-2 text-sm font-medium text-gray-700">Nested Walk-Forward</span>
+                                </label>
+                                <div x-show="form.walk_forward_nested" x-collapse class="space-y-3">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm text-gray-600 mb-1">Inner Train (years)</label>
+                                            <input type="number" x-model.number="form.wf_inner_train_years" step="0.5" min="0.5" max="10"
+                                                   class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm text-gray-600 mb-1">Inner Test (years)</label>
+                                            <input type="number" x-model.number="form.wf_inner_test_years" step="0.5" min="0.5" max="5"
+                                                   class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm text-gray-600 mb-1">Inner Step (months)</label>
+                                            <input type="number" x-model.number="form.wf_inner_step_months" min="1" max="24"
+                                                   class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                        <div class="flex items-end">
+                                            <label class="flex items-center mb-2">
+                                                <input type="checkbox" x-model="form.wf_inner_anchored"
+                                                       class="rounded border-gray-300 text-blue-600">
+                                                <span class="ml-2 text-sm text-gray-700">Inner Anchored</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <div class="border-t pt-4" x-data="{ advOpen: false }">
+                        <button type="button" @click="advOpen = !advOpen" class="collapsible-trigger w-full">
+                            <span class="text-sm font-medium">Advanced Options</span>
+                            <svg class="collapsible-arrow" :class="advOpen && 'collapsible-arrow--open'" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <div x-show="advOpen" x-collapse class="mt-3 space-y-3">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Preset Profile</label>
+                                <select x-model="form.preset_profile" @change="applyPresetProfile"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="">Custom / No Preset</option>
+                                    <option value="research">Research (Fast)</option>
+                                    <option value="realistic">Realistic (Core)</option>
+                                    <option value="defensive">Defensive (Strict)</option>
+                                </select>
+                                <p class="text-xs text-gray-500 mt-1">Fills execution and risk defaults; you can still adjust fields afterwards.</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Costs (%)</label>
+                                <input type="number" x-model.number="form.costs_pct" step="0.01" min="0"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Tax Exemption (EUR)</label>
+                                <input type="number" x-model.number="form.tax_exemption" step="100" min="0"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Execution Lag (days)</label>
+                                    <input type="number" x-model.number="form.execution_lag_days" min="0" step="1"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Max Volume Participation</label>
+                                    <input type="number" x-model.number="form.max_volume_participation" min="0" max="1" step="0.01"
+                                           placeholder="0.10 = 10%"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Min Daily $ Volume</label>
+                                    <input type="number" x-model.number="form.min_daily_dollar_volume" min="0" step="1000"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Missing Volume</label>
+                                    <select x-model="form.liquidity_on_missing_volume"
+                                            class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="allow">Allow Trade</option>
+                                        <option value="skip">Skip Trade</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="border-t pt-3">
+                                <p class="text-xs font-medium text-gray-700 mb-2">Risk Overlays</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Max Position</label>
+                                        <input type="number" x-model.number="form.max_position" min="0" max="1" step="0.01"
+                                               placeholder="0.25"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Turnover Budget</label>
+                                        <input type="number" x-model.number="form.turnover_budget" min="0" max="1" step="0.01"
+                                               placeholder="0.20"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <label class="block text-sm text-gray-600 mb-1">Sector Caps</label>
+                                    <input type="text" x-model="form.sector_caps_text" placeholder="equity=0.6, bonds=0.4"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div class="mt-3">
+                                    <label class="block text-sm text-gray-600 mb-1">Ticker Sectors</label>
+                                    <textarea x-model="form.ticker_sectors_text" rows="2" placeholder="SPY=equity, BND=bonds"
+                                              class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                                </div>
+                                <div class="grid grid-cols-3 gap-3 mt-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Brake Threshold</label>
+                                        <input type="number" x-model.number="form.drawdown_brake_threshold" min="0" max="1" step="0.01"
+                                               placeholder="0.15"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Brake Cash</label>
+                                        <input type="number" x-model.number="form.drawdown_brake_cash_target" min="0" max="1" step="0.01"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Release</label>
+                                        <input type="number" x-model.number="form.drawdown_brake_release" min="0" max="1" step="0.01"
+                                               placeholder="0.08"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="form.tax_enabled" id="tax_enabled"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="tax_enabled" class="ml-2 text-sm text-gray-700">Enable German Tax</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="form.drip_enabled" id="drip_enabled"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="drip_enabled" class="ml-2 text-sm text-gray-700">DRIP (Dividend Reinvestment)</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="form.skip_failed" id="skip_failed"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="skip_failed" class="ml-2 text-sm text-gray-700">Skip Failed Tickers</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit"
+                            :disabled="loading || form.strategies.length === 0 || form.rebalance_frequencies.length === 0"
+                            class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        <span x-show="!loading">Run Batch Optimization</span>
+                        <span x-show="loading" class="flex items-center justify-center">
+                            <svg class="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            Optimizing <span x-text="form.strategies.length"></span> strategies...
+                        </span>
+                    </button>
+                    <div x-show="loading" class="mt-4">
+                        <p class="text-xs text-gray-600" x-text="progressSummary"></p>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Elapsed: <span x-text="formatDuration(elapsedSeconds)"></span>
+                        </p>
+                        <button type="button"
+                                class="mt-3 text-xs text-red-600 hover:text-red-800 font-medium"
+                                x-show="!cancelRequested"
+                                @click="cancelBatchOptimize">
+                            Cancel Batch Optimization
+                        </button>
+                        <p class="text-xs text-gray-500 mt-2" x-show="cancelRequested">Cancellation requested...</p>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Results -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Error Display -->
+            <div x-show="error" x-cloak class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div class="flex items-start">
+                    <svg class="w-5 h-5 text-red-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <div>
+                        <h3 class="text-red-800 font-medium">Error</h3>
+                        <p class="text-red-700 text-sm mt-1" x-text="error"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Panel -->
+            <template x-if="result">
+                <div class="space-y-6">
+                    <!-- Summary Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="card p-4">
+                            <p class="text-sm text-gray-500">Period</p>
+                            <p class="text-lg font-semibold text-gray-900">
+                                <span x-text="result.start_date.substring(0, 4)"></span> - <span x-text="result.end_date.substring(0, 4)"></span>
+                            </p>
+                        </div>
+                        <div class="card p-4">
+                            <p class="text-sm text-gray-500">Total Strategies</p>
+                            <p class="text-lg font-semibold text-gray-900" x-text="result.total_strategies"></p>
+                        </div>
+                        <div class="card p-4">
+                            <p class="text-sm text-gray-500">Successful</p>
+                            <p class="text-lg font-semibold text-green-600" x-text="result.successful_strategies"></p>
+                        </div>
+                        <div class="card p-4">
+                            <p class="text-sm text-gray-500" x-text="result.walk_forward_enabled ? 'Mode' : 'Failed'"></p>
+                            <p x-show="result.walk_forward_enabled" class="text-lg font-semibold text-amber-600" x-text="result.walk_forward_nested ? 'Nested Walk-Forward' : 'Walk-Forward'"></p>
+                            <p x-show="!result.walk_forward_enabled" class="text-lg font-semibold" :class="result.failed_strategies > 0 ? 'text-red-600' : 'text-gray-900'" x-text="result.failed_strategies"></p>
+                        </div>
+                    </div>
+
+                    <div x-show="result.walk_forward_enabled" class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                        <p class="text-sm text-amber-800">
+                            Walk-Forward config:
+                            train <span class="font-semibold" x-text="result.wf_train_years"></span>y,
+                            test <span class="font-semibold" x-text="result.wf_test_years"></span>y,
+                            step <span class="font-semibold" x-text="result.wf_step_months"></span>m,
+                            <span class="font-semibold" x-text="result.wf_anchored ? 'anchored' : 'rolling'"></span>.
+                            <template x-if="result.walk_forward_nested">
+                                <span>
+                                    Inner:
+                                    <span class="font-semibold" x-text="result.wf_inner_train_years"></span>y /
+                                    <span class="font-semibold" x-text="result.wf_inner_test_years"></span>y /
+                                    <span class="font-semibold" x-text="result.wf_inner_step_months"></span>m
+                                    (<span class="font-semibold" x-text="result.wf_inner_anchored ? 'anchored' : 'rolling'"></span>).
+                                </span>
+                            </template>
+                        </p>
+                    </div>
+
+                    <!-- Download Params Button -->
+                    <div class="flex justify-end" x-show="result.export_params && Object.keys(result.export_params).length > 0">
+                        <button @click="downloadParams"
+                                class="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                            </svg>
+                            Download Optimized Params (JSON)
+                        </button>
+                    </div>
+
+                    <!-- Best Strategy Card -->
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-6" x-show="result.results && result.results.length > 0">
+                        <h3 class="text-lg font-semibold text-green-800 mb-3">Best Strategy</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <p class="text-sm text-green-600">Strategy</p>
+                                <p class="font-semibold text-green-900" x-text="result.results[0]?.strategy_name"></p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-green-600">Rebalance</p>
+                                <p class="font-semibold text-green-900" x-text="result.results[0]?.best_rebalance_frequency"></p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-green-600" x-text="result.metric"></p>
+                                <p class="font-semibold text-green-900" x-text="formatMetricValue(result.results[0]?.metric_value, result.metric)"></p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-green-600">Best Params</p>
+                                <p class="font-semibold text-green-900 text-xs font-mono" x-text="formatParams(result.results[0]?.best_params)"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Results Table -->
+                    <div class="card overflow-hidden">
+                        <div class="px-6 py-4 border-b">
+                            <h3 class="text-lg font-semibold text-gray-900">
+                                Strategy Rankings
+                                <span class="text-sm font-normal text-gray-500">
+                                    (by <span x-text="result.metric"></span>, <span x-text="result.minimize ? 'minimized' : 'maximized'"></span>)
+                                </span>
+                            </h3>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th @click="toggleSort('rank')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            Rank
+                                            <span x-show="sortColumn === 'rank'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <th @click="toggleSort('strategy_name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            Strategy
+                                            <span x-show="sortColumn === 'strategy_name'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <th @click="toggleSort('best_rebalance_frequency')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            Rebalance
+                                            <span x-show="sortColumn === 'best_rebalance_frequency'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                            Best Params
+                                        </th>
+                                        <th @click="toggleSort('sharpe_ratio')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            <span x-text="result.walk_forward_enabled ? 'OOS Sharpe' : 'Sharpe'"></span>
+                                            <span x-show="sortColumn === 'sharpe_ratio'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <!-- Walk-Forward specific columns -->
+                                        <template x-if="result.walk_forward_enabled">
+                                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                                                IS Sharpe
+                                            </th>
+                                        </template>
+                                        <template x-if="result.walk_forward_enabled">
+                                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                                                Degradation
+                                            </th>
+                                        </template>
+                                        <template x-if="result.walk_forward_enabled">
+                                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                                                Overfitting
+                                            </th>
+                                        </template>
+                                        <!-- Standard columns (shown when not walk-forward) -->
+                                        <template x-if="!result.walk_forward_enabled">
+                                            <th @click="toggleSort('cagr')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                                CAGR
+                                                <span x-show="sortColumn === 'cagr'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                            </th>
+                                        </template>
+                                        <template x-if="!result.walk_forward_enabled">
+                                            <th @click="toggleSort('sortino_ratio')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                                Sortino
+                                                <span x-show="sortColumn === 'sortino_ratio'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                            </th>
+                                        </template>
+                                        <template x-if="!result.walk_forward_enabled">
+                                            <th @click="toggleSort('max_drawdown')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                                MaxDD
+                                                <span x-show="sortColumn === 'max_drawdown'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                            </th>
+                                        </template>
+                                        <template x-if="!result.walk_forward_enabled">
+                                            <th @click="toggleSort('calmar_ratio')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                                Calmar
+                                                <span x-show="sortColumn === 'calmar_ratio'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                            </th>
+                                        </template>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                                            <span x-text="result.walk_forward_enabled ? 'Windows' : 'Combos'"></span>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <template x-for="row in sortedResults" :key="row.rank + row.strategy_name">
+                                        <tr :class="row.rank === 1 ? 'bg-green-50' : 'hover:bg-gray-50'">
+                                            <td class="px-4 py-3 text-sm font-medium" :class="row.rank === 1 ? 'text-green-700' : 'text-gray-900'" x-text="row.rank"></td>
+                                            <td class="px-4 py-3">
+                                                <div class="text-sm font-medium text-gray-900" x-text="row.strategy_name"></div>
+                                                <div class="text-xs text-gray-500" x-text="row.strategy_class"></div>
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-gray-600" x-text="row.best_rebalance_frequency"></td>
+                                            <td class="px-4 py-3 text-xs text-gray-600 font-mono max-w-xs truncate" :title="formatParams(row.best_params)" x-text="formatParams(row.best_params) || 'default'"></td>
+                                            <!-- Sharpe (or OOS Sharpe for walk-forward) -->
+                                            <td class="px-4 py-3 text-sm text-right"
+                                                :class="(row.walk_forward ? row.walk_forward.avg_oos_sharpe : row.sharpe_ratio) >= 0 ? 'text-green-600' : 'text-red-600'"
+                                                x-text="formatNum(row.walk_forward ? row.walk_forward.avg_oos_sharpe : row.sharpe_ratio, 2)"></td>
+                                            <!-- Walk-Forward specific columns -->
+                                            <template x-if="result.walk_forward_enabled">
+                                                <td class="px-4 py-3 text-sm text-right text-blue-600" x-text="formatNum(row.walk_forward?.avg_is_sharpe, 2)"></td>
+                                            </template>
+                                            <template x-if="result.walk_forward_enabled">
+                                                <td class="px-4 py-3 text-sm text-right"
+                                                    :class="(row.walk_forward?.degradation_ratio || 0) < 0.3 ? 'text-green-600' : 'text-orange-600'"
+                                                    x-text="formatPct(row.walk_forward?.degradation_ratio)"></td>
+                                            </template>
+                                            <template x-if="result.walk_forward_enabled">
+                                                <td class="px-4 py-3 text-sm text-right"
+                                                    :class="(row.walk_forward?.overfitting_score || 0) < 0.5 ? 'text-green-600' : 'text-red-600'"
+                                                    x-text="formatNum(row.walk_forward?.overfitting_score, 2)"></td>
+                                            </template>
+                                            <!-- Standard columns (non walk-forward) -->
+                                            <template x-if="!result.walk_forward_enabled">
+                                                <td class="px-4 py-3 text-sm text-right" :class="(row.cagr || 0) >= 0 ? 'text-green-600' : 'text-red-600'" x-text="formatPct(row.cagr)"></td>
+                                            </template>
+                                            <template x-if="!result.walk_forward_enabled">
+                                                <td class="px-4 py-3 text-sm text-right text-gray-900" x-text="formatNum(row.sortino_ratio, 2)"></td>
+                                            </template>
+                                            <template x-if="!result.walk_forward_enabled">
+                                                <td class="px-4 py-3 text-sm text-right text-red-600" x-text="formatPct(row.max_drawdown)"></td>
+                                            </template>
+                                            <template x-if="!result.walk_forward_enabled">
+                                                <td class="px-4 py-3 text-sm text-right text-gray-900" x-text="formatNum(row.calmar_ratio, 2)"></td>
+                                            </template>
+                                            <td class="px-4 py-3 text-sm text-right text-gray-500" x-text="row.walk_forward ? row.walk_forward.num_windows : row.total_combinations"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Placeholder -->
+            <template x-if="!result && !loading && !error">
+                <div class="bg-gray-50 rounded-lg p-12 text-center">
+                    <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">Batch Optimization</h3>
+                    <p class="text-gray-500">Select strategies to optimize using predefined parameter grids.</p>
+                    <p class="text-sm text-gray-400 mt-2">Each strategy will be tested with its own parameter grid and all rebalance frequencies.</p>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>
+
+<script>
+function batchOptimize() {
+    return {
+        loading: false,
+        error: null,
+        result: null,
+        elapsedSeconds: 0,
+        elapsedTimer: null,
+        progressData: null,
+        progressInterval: null,
+        currentRunId: null,
+        cancelRequested: false,
+
+        // Sorting state
+        sortColumn: null,
+        sortDirection: 'asc',
+
+        form: {
+            strategies: [],
+            rebalance_frequencies: ['monthly', 'quarterly'],
+            metric: 'sharpe_ratio',
+            minimize: 'false',
+            start_date: '2010-01-01',
+            end_date: '',
+            initial_capital: 10000,
+            metric_basis: 'net_liquidation',
+            costs_pct: 0.1,
+            tax_exemption: 1000,
+            tax_enabled: true,
+            drip_enabled: false,
+            skip_failed: true,
+            preset_profile: '',
+            execution_lag_days: 0,
+            max_volume_participation: null,
+            min_daily_dollar_volume: 0,
+            liquidity_on_missing_volume: 'allow',
+            max_position: null,
+            turnover_budget: null,
+            sector_caps_text: '',
+            ticker_sectors_text: '',
+            drawdown_brake_threshold: null,
+            drawdown_brake_cash_target: 1.0,
+            drawdown_brake_release: null,
+            // Walk-Forward options
+            walk_forward: false,
+            walk_forward_nested: false,
+            wf_train_years: 5,
+            wf_test_years: 1,
+            wf_step_months: 12,
+            wf_anchored: false,
+            wf_inner_train_years: 3,
+            wf_inner_test_years: 1,
+            wf_inner_step_months: 6,
+            wf_inner_anchored: false,
+        },
+
+        selectAll() {
+            // Get all strategy paths from the checkboxes
+            const checkboxes = document.querySelectorAll('input[type="checkbox"][value]');
+            this.form.strategies = Array.from(checkboxes)
+                .filter(cb => cb.value && cb.value.includes('/'))
+                .map(cb => cb.value);
+        },
+
+        deselectAll() {
+            this.form.strategies = [];
+        },
+
+        get sortedResults() {
+            if (!this.result?.results) return [];
+            if (!this.sortColumn) return this.result.results;
+
+            const results = [...this.result.results];
+            const col = this.sortColumn;
+            const dir = this.sortDirection === 'asc' ? 1 : -1;
+
+            return results.sort((a, b) => {
+                let aVal, bVal;
+
+                if (col === 'strategy_name' || col === 'best_rebalance_frequency') {
+                    aVal = a[col] || '';
+                    bVal = b[col] || '';
+                    return dir * aVal.localeCompare(bVal);
+                }
+
+                aVal = a[col];
+                bVal = b[col];
+
+                if (aVal === null || aVal === undefined) return 1;
+                if (bVal === null || bVal === undefined) return -1;
+
+                return dir * (aVal - bVal);
+            });
+        },
+
+        toggleSort(column) {
+            if (this.sortColumn === column) {
+                this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sortColumn = column;
+                // Default directions
+                if (column === 'rank' || column === 'max_drawdown' || column === 'volatility' || column === 'strategy_name' || column === 'best_rebalance_frequency') {
+                    this.sortDirection = 'asc';
+                } else {
+                    this.sortDirection = 'desc';
+                }
+            }
+        },
+
+        applyPresetProfile() {
+            const presets = {
+                research: {
+                    execution_lag_days: 0,
+                    max_volume_participation: null,
+                    min_daily_dollar_volume: 0,
+                    liquidity_on_missing_volume: 'allow',
+                    max_position: null,
+                    turnover_budget: null,
+                    drawdown_brake_threshold: null,
+                    drawdown_brake_cash_target: 1.0,
+                    drawdown_brake_release: null,
+                },
+                realistic: {
+                    execution_lag_days: 1,
+                    max_volume_participation: 0.10,
+                    min_daily_dollar_volume: 250000,
+                    liquidity_on_missing_volume: 'skip',
+                    max_position: 0.35,
+                    turnover_budget: 0.35,
+                    drawdown_brake_threshold: null,
+                    drawdown_brake_cash_target: 1.0,
+                    drawdown_brake_release: null,
+                },
+                defensive: {
+                    execution_lag_days: 1,
+                    max_volume_participation: 0.05,
+                    min_daily_dollar_volume: 1000000,
+                    liquidity_on_missing_volume: 'skip',
+                    max_position: 0.25,
+                    turnover_budget: 0.20,
+                    drawdown_brake_threshold: 0.15,
+                    drawdown_brake_cash_target: 0.70,
+                    drawdown_brake_release: 0.08,
+                },
+            };
+            const preset = presets[this.form.preset_profile];
+            if (!preset) {
+                return;
+            }
+            Object.assign(this.form, preset);
+        },
+
+        async runBatchOptimize() {
+            this.loading = true;
+            this.error = null;
+            this.result = null;
+            this.sortColumn = null;
+            this.startTimer();
+            this.cancelRequested = false;
+            const runId = (crypto?.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random()}`;
+            this.currentRunId = runId;
+            this.startProgressPolling(runId);
+
+            try {
+                const sectorCaps = parseKeyValueMap(this.form.sector_caps_text, true);
+                const tickerSectors = parseKeyValueMap(this.form.ticker_sectors_text, false);
+                const payload = {
+                    strategies: this.form.strategies,
+                    run_id: runId,
+                    rebalance_frequencies: this.form.rebalance_frequencies,
+                    metric: this.form.metric,
+                    minimize: this.form.minimize === 'true',
+                    start_date: this.form.start_date,
+                    end_date: this.form.end_date || null,
+                    initial_capital: this.form.initial_capital,
+                    metric_basis: this.form.metric_basis,
+                    costs_pct: this.form.costs_pct / 100,
+                    tax_exemption: this.form.tax_exemption,
+                    tax_enabled: this.form.tax_enabled,
+                    drip_enabled: this.form.drip_enabled,
+                    skip_failed: this.form.skip_failed,
+                    execution_lag_days: this.form.execution_lag_days,
+                    max_volume_participation: this.form.max_volume_participation,
+                    min_daily_dollar_volume: this.form.min_daily_dollar_volume,
+                    liquidity_on_missing_volume: this.form.liquidity_on_missing_volume,
+                    max_position: this.form.max_position,
+                    turnover_budget: this.form.turnover_budget,
+                    sector_caps: sectorCaps,
+                    ticker_sectors: tickerSectors,
+                    drawdown_brake_threshold: this.form.drawdown_brake_threshold,
+                    drawdown_brake_cash_target: this.form.drawdown_brake_cash_target,
+                    drawdown_brake_release: this.form.drawdown_brake_release,
+                    enable_validation: true,
+                    // Walk-Forward options
+                    walk_forward: this.form.walk_forward,
+                    walk_forward_nested: this.form.walk_forward_nested,
+                    wf_train_years: this.form.wf_train_years,
+                    wf_test_years: this.form.wf_test_years,
+                    wf_step_months: this.form.wf_step_months,
+                    wf_anchored: this.form.wf_anchored,
+                    wf_inner_train_years: this.form.wf_inner_train_years,
+                    wf_inner_test_years: this.form.wf_inner_test_years,
+                    wf_inner_step_months: this.form.wf_inner_step_months,
+                    wf_inner_anchored: this.form.wf_inner_anchored,
+                };
+
+                const response = await fetch('/api/v1/batch-optimize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    let errorMsg = 'Batch optimization failed';
+                    try {
+                        const err = await response.json();
+                        if (typeof err.detail === 'string') {
+                            errorMsg = err.detail;
+                        } else if (err.detail && typeof err.detail === 'object') {
+                            errorMsg = JSON.stringify(err.detail);
+                        } else if (err.message) {
+                            errorMsg = err.message;
+                        }
+                    } catch (parseErr) {
+                        try {
+                            errorMsg = await response.text();
+                            if (errorMsg.length > 200) {
+                                errorMsg = errorMsg.substring(0, 200) + '...';
+                            }
+                        } catch {
+                            errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                        }
+                    }
+                    throw new Error(errorMsg);
+                }
+
+                this.result = await response.json();
+            } catch (e) {
+                if (this.cancelRequested) {
+                    this.error = 'Batch optimization cancelled.';
+                } else {
+                    this.error = e.message;
+                }
+            } finally {
+                this.loading = false;
+                this.stopProgressPolling();
+                this.stopTimer();
+            }
+        },
+        get progressSummary() {
+            if (!this.progressData) return 'Initializing batch optimization...';
+            if (this.progressData.status === 'pending') return 'Waiting for optimization to start...';
+            if (this.progressData.status === 'cancelling') return 'Cancelling optimization...';
+            if (this.progressData.status === 'cancelled') return 'Batch optimization cancelled';
+            if (!this.progressData.strategy_index) return 'Preparing optimization...';
+            const name = this.progressData.strategy_name || 'Preparing';
+            const eta = this.estimateEta(this.progressData.run_count, this.progressData.total_runs)
+                || this.estimateEta(this.progressData.strategy_index, this.progressData.strategy_total);
+            return `Strategy ${this.progressData.strategy_index}/${this.progressData.strategy_total}: ${name}${eta ? ` · ETA ${eta}` : ''}`;
+        },
+        startProgressPolling(runId) {
+            this.progressData = null;
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+            }
+            const poll = async () => {
+                try {
+                    const response = await fetch(`/api/v1/batch-optimize/progress/${runId}`);
+                    if (!response.ok) {
+                        return;
+                    }
+                    this.progressData = await response.json();
+                } catch {
+                    // Ignore polling errors while optimization is running
+                }
+            };
+            poll();
+            this.progressInterval = setInterval(poll, 1000);
+        },
+        stopProgressPolling() {
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+                this.progressInterval = null;
+            }
+        },
+        async cancelBatchOptimize() {
+            if (!this.currentRunId) return;
+            this.cancelRequested = true;
+            try {
+                await fetch(`/api/v1/batch-optimize/cancel/${this.currentRunId}`, { method: 'POST' });
+            } catch {
+                // Ignore cancellation errors
+            }
+        },
+        startTimer() {
+            this.elapsedSeconds = 0;
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+            }
+            this.elapsedTimer = setInterval(() => {
+                this.elapsedSeconds += 1;
+            }, 1000);
+        },
+        stopTimer() {
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+                this.elapsedTimer = null;
+            }
+        },
+
+        estimateEta(completed, total) {
+            const elapsed = this.elapsedSeconds;
+            if (!elapsed || !completed || !total || completed <= 0 || total <= 0 || completed >= total) {
+                return '';
+            }
+            const remaining = Math.ceil((elapsed * (total - completed)) / completed);
+            return formatDuration(remaining);
+        },
+
+        formatPct(value) {
+            if (value === null || value === undefined) return '-';
+            return (value * 100).toFixed(1) + '%';
+        },
+
+        formatNum(value, decimals = 2) {
+            if (value === null || value === undefined) return '-';
+            return value.toFixed(decimals);
+        },
+
+        formatMetricValue(value, metric) {
+            if (value === null || value === undefined) return '-';
+            if (['cagr', 'max_drawdown', 'volatility', 'total_return'].includes(metric)) {
+                return this.formatPct(value);
+            }
+            return this.formatNum(value, 3);
+        },
+
+        formatParams(params) {
+            if (!params || Object.keys(params).length === 0) return '';
+            return Object.entries(params).map(([k, v]) => `${k}=${v}`).join(', ');
+        },
+
+        downloadParams() {
+            if (!this.result?.export_params) return;
+
+            const data = JSON.stringify(this.result.export_params, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'optimized_params.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    };
+}
+</script>
+{% endblock %}

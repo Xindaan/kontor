@@ -1,0 +1,757 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="playbook()" x-init="init()" class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Meta-Playbook</h1>
+            <p class="text-sm text-gray-500 mt-1">
+                Strategy promotion governance: baseline vs. candidates, rolling 3Y/5Y,
+                broker mapping audit. Reproducible artifact for quarterly reviews.
+            </p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Run-Form -->
+        <div class="lg:col-span-1 space-y-6">
+            <form @submit.prevent="runPromotion" novalidate class="card">
+                <div class="px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Configuration</h2>
+                </div>
+
+                <div class="p-6 space-y-4">
+                    <!-- Research-Proxy-Mode -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Research Mode</label>
+                        <div class="space-y-1">
+                            <label class="flex items-center text-sm">
+                                <input type="radio" value="live" x-model="form.research_proxy_mode"
+                                       @change="applyProxyDefaults"
+                                       class="mr-2">
+                                <span>Live (real instruments, default)</span>
+                            </label>
+                            <label class="flex items-center text-sm">
+                                <input type="radio" value="soxl_proxy" x-model="form.research_proxy_mode"
+                                       @change="applyProxyDefaults"
+                                       class="mr-2">
+                                <span>SOXL proxy for long-history research</span>
+                            </label>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            <strong>Live</strong>: each strategy runs on its real asset universe (young UCITS tickers have short comparison history).
+                            <strong>SOXL proxy</strong> (really a "long-history proxy"): all candidates are automatically remapped to long-history substitutes:
+                        </p>
+                        <ul class="text-xs text-gray-500 mt-1 list-disc list-inside space-y-0.5">
+                            <li><strong>1:1 substitutes</strong> (same index, same leverage):
+                                <code>3SEM.L→SOXL</code>, <code>VVSM.DE→SOXX</code>, <code>EXXT.DE→QQQ</code>
+                            </li>
+                            <li><strong>Approximate substitutes</strong> (factor/region mismatch, documented):
+                                <code>QDVF.DE→IVE</code>, <code>QDVH.DE→MTUM</code>
+                            </li>
+                            <li><strong>Not substituted</strong>: <code>3XFE.L</code>, <code>3XEE.L</code> (no 3x EU proxy with long history)</li>
+                        </ul>
+                    </div>
+
+                    <!-- Baseline -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Baseline</label>
+                        <select x-model="form.baseline"
+                                class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <template x-for="opt in baselineOptions" :key="opt.path">
+                                <option :value="opt.path" x-text="opt.label"></option>
+                            </template>
+                        </select>
+                        <div class="flex items-center gap-2 mt-1">
+                            <input type="text" x-model="form.baseline"
+                                   class="flex-1 border rounded-md px-2 py-1 text-xs font-mono text-gray-600 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Path to baseline strategy">
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Dropdown to select, text field for custom paths (e.g. `builtin:...`).</p>
+                    </div>
+
+                    <!-- Candidates -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-sm font-medium text-gray-700">Candidates</label>
+                            <button type="button" @click="resetToDefaults"
+                                    class="text-xs text-gray-500 hover:text-gray-800"
+                                    title="Reset to preset standard comparison set">
+                                ↺ Default
+                            </button>
+                        </div>
+
+                        <!-- Dropdown: add known strategy -->
+                        <div class="mb-2">
+                            <select @change="addStrategyFromDropdown($event)"
+                                    class="w-full border rounded-md px-2 py-1.5 text-sm bg-blue-50 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">+ Add known strategy…</option>
+                                <template x-for="grp in knownStrategyGroups" :key="grp.tier">
+                                    <optgroup :label="grp.tier">
+                                        <template x-for="opt in grp.items" :key="opt.path">
+                                            <option :value="opt.path"
+                                                    :disabled="isAlreadyPicked(opt.path)"
+                                                    x-text="opt.shortLabel + (isAlreadyPicked(opt.path) ? '  (already added)' : '')"></option>
+                                        </template>
+                                    </optgroup>
+                                </template>
+                            </select>
+                        </div>
+
+                        <!-- List of selected candidates -->
+                        <template x-for="(s, idx) in form.strategies" :key="idx">
+                            <div class="mb-1.5 border border-gray-200 rounded-md p-2 bg-gray-50">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                                          :class="tierBadgeClass(s)"
+                                          x-text="tierFor(s) || '[Custom]'"></span>
+                                    <span class="text-xs text-gray-700 flex-1 truncate"
+                                          x-text="displayNameFor(s)"></span>
+                                    <button type="button" @click="form.strategies.splice(idx, 1)"
+                                            class="text-xs text-red-600 hover:text-red-800"
+                                            title="Remove">x</button>
+                                </div>
+                                <input type="text" x-model="form.strategies[idx]"
+                                       class="w-full border rounded-md px-2 py-1 text-xs font-mono text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </template>
+                        <p x-show="form.strategies.length === 0" class="text-xs text-gray-500 italic">
+                            No candidates — baseline-only report.
+                        </p>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Tier prefix shows governance status: [Production], [Pilot], [Research], [Benchmark].
+                        </p>
+                    </div>
+
+                    <!-- Zeitraum -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Start</label>
+                            <input type="date" x-model="form.start"
+                                   class="w-full border rounded-md px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">End (opt.)</label>
+                            <input type="date" x-model="form.end"
+                                   class="w-full border rounded-md px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+
+                    <!-- Capital / Costs -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Capital (EUR)</label>
+                            <input type="number" min="100" step="100" x-model.number="form.initial_capital"
+                                   class="w-full border rounded-md px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Costs (frac)</label>
+                            <input type="number" min="0" step="0.0005" x-model.number="form.costs_pct"
+                                   class="w-full border rounded-md px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+
+                    <!-- Metric Basis -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Metric Basis</label>
+                        <select x-model="form.metric_basis"
+                                class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="net_liquidation">net_liquidation (Default)</option>
+                            <option value="net_realized">net_realized</option>
+                            <option value="gross">gross</option>
+                        </select>
+                    </div>
+
+                    <!-- Steuer + Align -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="flex items-center text-sm">
+                            <input type="checkbox" x-model="form.tax_enabled" class="mr-2">
+                            <span>Tax (DE)</span>
+                        </label>
+                        <label class="flex items-center text-sm">
+                            <input type="checkbox" x-model="form.skip_failed" class="mr-2">
+                            <span>Skip-Failed</span>
+                        </label>
+                        <label class="flex items-center text-sm">
+                            <input type="checkbox" x-model="form.validate_data" class="mr-2">
+                            <span>Validation</span>
+                        </label>
+                        <div>
+                            <select x-model="form.align"
+                                    class="w-full border rounded-md px-2 py-1 text-xs focus:ring-blue-500 focus:border-blue-500">
+                                <option value="ffill">align=ffill</option>
+                                <option value="intersection">align=intersection</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Broker -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Broker (mapping audit)</label>
+                        <div class="space-y-1">
+                            <label class="flex items-center text-sm">
+                                <input type="checkbox" value="trade_republic" x-model="form.brokers" class="mr-2">
+                                <span>Trade Republic</span>
+                            </label>
+                            <label class="flex items-center text-sm">
+                                <input type="checkbox" value="maxblue" x-model="form.brokers" class="mr-2">
+                                <span>Maxblue (Deutsche Bank)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Submit -->
+                    <div class="pt-2 border-t">
+                        <button type="submit" :disabled="loading"
+                                class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                            <span x-show="!loading">Generate promotion report</span>
+                            <span x-show="loading" x-cloak>
+                                <svg class="inline w-4 h-4 mr-1 animate-spin" viewBox="0 0 24 24" fill="none">
+                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
+                                    <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4"/>
+                                </svg>
+                                running...
+                            </span>
+                        </button>
+                        <p class="text-xs text-gray-500 mt-2">
+                            Synchronous — can take 30-60s depending on date range.
+                        </p>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Past Artifacts -->
+            <div class="card">
+                <div class="px-6 py-4 border-b flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-gray-900">Past Artifacts</h2>
+                    <button type="button" @click="loadArtifactList"
+                            class="text-xs text-blue-600 hover:text-blue-800">Reload</button>
+                </div>
+                <div class="p-4">
+                    <p x-show="!artifacts.length" class="text-xs text-gray-500 italic">
+                        No artifacts under results/meta_promotion/ yet.
+                    </p>
+                    <ul class="divide-y divide-slate-200">
+                        <template x-for="a in artifacts" :key="a.artifact_id">
+                            <li class="py-2 flex justify-between items-center gap-2">
+                                <button type="button" @click="loadArtifactById(a.artifact_id)"
+                                        class="flex-1 text-left text-xs hover:bg-blue-50 rounded px-2 py-1">
+                                    <div class="font-mono text-blue-700" x-text="a.artifact_id?.slice(0, 12)"></div>
+                                    <div class="text-slate-500" x-text="a.generated_at?.slice(0, 19)?.replace('T', ' ')"></div>
+                                </button>
+                                <div class="text-xs text-slate-500 text-right">
+                                    <div x-text="a.candidate_count + ' cand.'"></div>
+                                    <div x-text="a.research_proxy_mode" class="font-mono"></div>
+                                </div>
+                            </li>
+                        </template>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Result-Panel -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Error -->
+            <div x-show="error" x-cloak class="alert alert--error">
+                <span x-text="error"></span>
+                <button type="button" @click="error = ''" class="alert__dismiss">×</button>
+            </div>
+
+            <!-- Idle Placeholder -->
+            <div x-show="!artifact && !loading" x-cloak class="card p-8 text-center">
+                <p class="text-sm text-slate-500">
+                    Fill in the form + "Generate promotion report", or select a past artifact.
+                </p>
+            </div>
+
+            <!-- Loading -->
+            <div x-show="loading" x-cloak class="card p-8 text-center">
+                <svg class="inline w-6 h-6 animate-spin text-blue-600 mb-2" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
+                    <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4"/>
+                </svg>
+                <p class="text-sm text-slate-600">Promotion report running...</p>
+            </div>
+
+            <!-- Result -->
+            <template x-if="artifact && !loading">
+                <div class="space-y-4">
+                    <!-- Artifact-Header -->
+                    <div class="card p-4">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="text-base font-semibold text-gray-900">Artifact</h3>
+                                <p class="text-xs text-slate-500 font-mono" x-text="artifact.artifact_id"></p>
+                                <p class="text-xs text-slate-500" x-text="artifact.generated_at"></p>
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="button" @click="view = 'tables'"
+                                        :class="view === 'tables' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'"
+                                        class="px-3 py-1 rounded text-xs">Tables</button>
+                                <button type="button" @click="loadMarkdown(); view = 'markdown'"
+                                        :class="view === 'markdown' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'"
+                                        class="px-3 py-1 rounded text-xs">Markdown</button>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-slate-600 grid grid-cols-2 gap-2">
+                            <div><span class="font-medium">Baseline:</span> <span class="font-mono" x-text="artifact.config?.baseline_path"></span></div>
+                            <div><span class="font-medium">Mode:</span> <span class="font-mono" x-text="artifact.config?.research_proxy_mode"></span></div>
+                            <div><span class="font-medium">Range:</span> <span x-text="(artifact.config?.start || '?') + ' → ' + (artifact.config?.end || 'today')"></span></div>
+                            <div><span class="font-medium">Basis:</span> <span class="font-mono" x-text="artifact.config?.metric_basis"></span></div>
+                        </div>
+                    </div>
+
+                    <!-- Tables-View -->
+                    <div x-show="view === 'tables'" x-cloak class="space-y-4">
+                        <!-- Strategy Metrics -->
+                        <div class="card overflow-hidden">
+                            <div class="px-4 py-2 border-b bg-slate-50">
+                                <h3 class="text-sm font-semibold text-gray-900">Strategy Metrics</h3>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="data-table w-full text-xs">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-left">Strategy</th>
+                                            <th class="text-left">Role</th>
+                                            <th class="text-right">CAGR</th>
+                                            <th class="text-right">MaxDD</th>
+                                            <th class="text-right">Sharpe</th>
+                                            <th class="text-right">Sortino</th>
+                                            <th class="text-right">Calmar</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="row in artifact.strategies || []" :key="row.path">
+                                            <tr>
+                                                <td class="font-mono text-xs" x-text="(row.metrics?.strategy_name || row.path)"></td>
+                                                <td><span class="badge" :class="row.role === 'baseline' ? 'badge--hold' : 'badge--buy'" x-text="row.role"></span></td>
+                                                <td class="text-right font-mono" x-text="fmtPct(row.metrics?.cagr)"></td>
+                                                <td class="text-right font-mono" x-text="fmtPct(row.metrics?.max_drawdown)"></td>
+                                                <td class="text-right font-mono" x-text="fmtNum(row.metrics?.sharpe)"></td>
+                                                <td class="text-right font-mono" x-text="fmtNum(row.metrics?.sortino)"></td>
+                                                <td class="text-right font-mono" x-text="fmtNum(row.metrics?.calmar)"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Vs Baseline -->
+                        <div class="card overflow-hidden" x-show="hasCandidates" x-cloak>
+                            <div class="px-4 py-2 border-b bg-slate-50">
+                                <h3 class="text-sm font-semibold text-gray-900">Vs. Baseline</h3>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="data-table w-full text-xs">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-left">Candidate</th>
+                                            <th class="text-right">ΔCAGR (pp)</th>
+                                            <th class="text-right">ΔMaxDD (pp)</th>
+                                            <th class="text-right">ΔSharpe</th>
+                                            <th class="text-right" title="Share of 3Y rolling windows with better MaxDD vs baseline">3Y MaxDD-Win</th>
+                                            <th class="text-right" title="Share of 3Y rolling windows with better CAGR vs baseline">3Y CAGR-Win</th>
+                                            <th class="text-right" title="Share of 5Y rolling windows with better MaxDD vs baseline">5Y MaxDD-Win</th>
+                                            <th class="text-right" title="Share of 5Y rolling windows with better CAGR vs baseline">5Y CAGR-Win</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="row in candidates" :key="row.path">
+                                            <tr>
+                                                <td class="font-mono text-xs" x-text="(row.metrics?.strategy_name || row.path)"></td>
+                                                <td class="text-right font-mono" :class="row.vs_baseline?.cagr_delta_pp >= 0 ? 'text-green-700' : 'text-red-700'"
+                                                    x-text="fmtPp(row.vs_baseline?.cagr_delta_pp)"></td>
+                                                <td class="text-right font-mono" :class="row.vs_baseline?.maxdd_delta_pp >= 0 ? 'text-green-700' : 'text-red-700'"
+                                                    x-text="fmtPp(row.vs_baseline?.maxdd_delta_pp)"></td>
+                                                <td class="text-right font-mono" :class="row.vs_baseline?.sharpe_delta >= 0 ? 'text-green-700' : 'text-red-700'"
+                                                    x-text="fmtNum(row.vs_baseline?.sharpe_delta)"></td>
+                                                <td class="text-right font-mono" x-text="fmtWin(row.vs_baseline?.rolling_3y, 'maxdd_win_rate')"></td>
+                                                <td class="text-right font-mono" x-text="fmtWin(row.vs_baseline?.rolling_3y, 'cagr_win_rate')"></td>
+                                                <td class="text-right font-mono" x-text="fmtWin(row.vs_baseline?.rolling_5y, 'maxdd_win_rate')"></td>
+                                                <td class="text-right font-mono" x-text="fmtWin(row.vs_baseline?.rolling_5y, 'cagr_win_rate')"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Broker Mapping -->
+                        <div class="card overflow-hidden">
+                            <div class="px-4 py-2 border-b bg-slate-50">
+                                <h3 class="text-sm font-semibold text-gray-900">Broker Mapping Audit</h3>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="data-table w-full text-xs">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-left">Strategy</th>
+                                            <th class="text-left">Broker</th>
+                                            <th class="text-left">Status</th>
+                                            <th class="text-left">Notes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="row in artifact.strategies || []" :key="row.path">
+                                            <template x-for="(bm, broker) in row.broker_mapping || {}" :key="broker">
+                                                <tr>
+                                                    <td class="font-mono text-xs" x-text="row.metrics?.strategy_name"></td>
+                                                    <td class="font-mono text-xs" x-text="broker"></td>
+                                                    <td>
+                                                        <span class="badge"
+                                                              :class="bmBadgeClass(bm)"
+                                                              x-text="bmBadgeText(bm)"></span>
+                                                    </td>
+                                                    <td class="text-xs text-slate-600 font-mono" x-text="formatMapping(bm)"></td>
+                                                </tr>
+                                            </template>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Paths -->
+                        <div class="card p-4">
+                            <h3 class="text-sm font-semibold text-gray-900 mb-2">Paths</h3>
+                            <div class="text-xs font-mono space-y-1">
+                                <div><span class="text-slate-500">json:</span> <span x-text="artifact.paths?.json"></span></div>
+                                <div><span class="text-slate-500">markdown:</span> <span x-text="artifact.paths?.markdown"></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Markdown-View -->
+                    <div x-show="view === 'markdown'" x-cloak class="card p-6">
+                        <div x-show="markdownLoading" x-cloak class="text-sm text-slate-500">Loading markdown...</div>
+                        <div x-show="!markdownLoading && markdownHtml" x-html="markdownHtml" class="prose prose-sm max-w-none"></div>
+                        <div x-show="!markdownLoading && !markdownHtml" x-cloak class="text-sm text-slate-500">No markdown found.</div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script>
+function playbook() {
+    return {
+        loading: false,
+        error: '',
+        artifact: null,
+        artifacts: [],
+        view: 'tables',
+        markdownLoading: false,
+        markdownHtml: '',
+        markdownArtifactId: '',
+        form: {
+            research_proxy_mode: 'live',
+            baseline: {{ default_baseline | tojson }},
+            strategies: {{ default_strategies[1:] | tojson }},
+            start: '2016-01-01',
+            end: '',
+            initial_capital: 10000,
+            costs_pct: 0.001,
+            metric_basis: 'net_liquidation',
+            tax_enabled: true,
+            skip_failed: true,
+            validate_data: true,
+            align: 'ffill',
+            brokers: {{ default_brokers | tojson }},
+        },
+        soxlDefaults: {
+            baseline: {{ soxl_proxy_baseline | tojson }},
+            strategies: {{ soxl_proxy_strategies[1:] | tojson }},
+        },
+        liveDefaults: {
+            baseline: {{ default_baseline | tojson }},
+            strategies: {{ default_strategies[1:] | tojson }},
+        },
+        // From list_strategies() — name carries a tier prefix like "[Pilot] ..."
+        discoveredStrategies: {{ strategies | tojson }},
+        // Built-in pseudo-paths (e.g. SOXL proxy baseline) to show in the dropdown
+        builtinStrategies: [
+            {
+                path: {{ soxl_proxy_baseline | tojson }},
+                name: '[Baseline] Sticky/Core Levered (Backtest, SOXL-Proxy)',
+                file_name: 'builtin:sticky_levered_soxl_proxy',
+            },
+        ],
+
+        init() {
+            this.loadArtifactList();
+        },
+
+        applyProxyDefaults() {
+            const src = this.form.research_proxy_mode === 'soxl_proxy' ? this.soxlDefaults : this.liveDefaults;
+            this.form.baseline = src.baseline;
+            this.form.strategies = [...src.strategies];
+        },
+
+        resetToDefaults() {
+            this.applyProxyDefaults();
+        },
+
+        // --- Strategy-Picker-Helper ---------------------------------------
+
+        // Returns the relative path form for a discovered strategy ('strategies/<file>').
+        relPathFor(item) {
+            if (!item) return '';
+            if (item.path) return item.path;  // built-in
+            return 'strategies/' + item.file_name;
+        },
+
+        // All known strategies (built-in + discovered), grouped by tier prefix.
+        get knownStrategyGroups() {
+            const all = [
+                ...this.builtinStrategies.map(s => ({ ...s, path: s.path })),
+                ...this.discoveredStrategies.map(s => ({ ...s, path: this.relPathFor(s) })),
+            ];
+            const tierOrder = ['[Production]', '[Pilot]', '[Research]', '[Benchmark]', '[Experimental]', '[Custom]'];
+            const groups = {};
+            for (const s of all) {
+                const tier = (s.name && s.name.match(/^\[[^\]]+\]/) || ['[Custom]'])[0];
+                if (!groups[tier]) groups[tier] = [];
+                // Short label without tier prefix for readability within the group
+                const shortLabel = s.name ? s.name.replace(/^\[[^\]]+\]\s*/, '') : (s.path || s.file_name);
+                groups[tier].push({ path: s.path, name: s.name, shortLabel });
+            }
+            return tierOrder
+                .filter(t => groups[t])
+                .map(t => ({ tier: t, items: groups[t] }));
+        },
+
+        // Baseline dropdown: only Production + builtin as sensible baselines.
+        get baselineOptions() {
+            const groups = this.knownStrategyGroups;
+            const out = [];
+            for (const g of groups) {
+                if (g.tier === '[Production]') {
+                    for (const item of g.items) {
+                        out.push({ path: item.path, label: item.shortLabel + '  ' + g.tier });
+                    }
+                }
+            }
+            // Include the current baseline if custom (so the select shows it)
+            if (this.form && this.form.baseline && !out.some(o => o.path === this.form.baseline)) {
+                out.push({ path: this.form.baseline, label: this.form.baseline + '  [Custom]' });
+            }
+            return out;
+        },
+
+        addStrategyFromDropdown(event) {
+            const path = event.target.value;
+            if (!path) return;
+            if (!this.isAlreadyPicked(path)) {
+                this.form.strategies.push(path);
+            }
+            event.target.value = '';  // reset
+        },
+
+        isAlreadyPicked(path) {
+            return this.form.strategies.includes(path);
+        },
+
+        // Lookup: matching display name for a path.
+        _lookupByPath(path) {
+            for (const s of this.discoveredStrategies) {
+                if (this.relPathFor(s) === path) return s;
+            }
+            for (const s of this.builtinStrategies) {
+                if (s.path === path) return s;
+            }
+            return null;
+        },
+
+        tierFor(path) {
+            const s = this._lookupByPath(path);
+            if (!s || !s.name) return '';
+            const m = s.name.match(/^\[[^\]]+\]/);
+            return m ? m[0] : '';
+        },
+
+        displayNameFor(path) {
+            const s = this._lookupByPath(path);
+            if (s && s.name) return s.name.replace(/^\[[^\]]+\]\s*/, '');
+            return path;
+        },
+
+        tierBadgeClass(path) {
+            const tier = this.tierFor(path);
+            switch (tier) {
+                case '[Production]': return 'bg-green-100 text-green-800';
+                case '[Pilot]':      return 'bg-blue-100 text-blue-800';
+                case '[Research]':   return 'bg-amber-100 text-amber-800';
+                case '[Benchmark]':  return 'bg-gray-200 text-gray-700';
+                case '[Experimental]': return 'bg-purple-100 text-purple-800';
+                default: return 'bg-gray-100 text-gray-600';
+            }
+        },
+
+        get hasCandidates() {
+            return (this.artifact?.strategies || []).some(r => r.role === 'candidate');
+        },
+
+        get candidates() {
+            return (this.artifact?.strategies || []).filter(r => r.role === 'candidate');
+        },
+
+        fmtPct(v) {
+            if (v === null || v === undefined || Number.isNaN(v)) return 'n/a';
+            return (v * 100).toFixed(2) + '%';
+        },
+
+        fmtPp(v) {
+            if (v === null || v === undefined || Number.isNaN(v)) return 'n/a';
+            return (v >= 0 ? '+' : '') + v.toFixed(2) + 'pp';
+        },
+
+        fmtNum(v) {
+            if (v === null || v === undefined || Number.isNaN(v)) return 'n/a';
+            return Number(v).toFixed(2);
+        },
+
+        // Win-rate formatter for compare_rolling() output.
+        // Backend returns {windows, cagr_win_rate, maxdd_win_rate,
+        // worst_maxdd_delta_pp}. We show maxdd_win_rate primarily
+        // (risk-reducer perspective matches the meta-playbook gates).
+        fmtWin(rolling, key = 'maxdd_win_rate') {
+            if (!rolling) return 'n/a';
+            const wr = rolling[key];
+            if (wr === null || wr === undefined || Number.isNaN(wr)) return 'n/a';
+            return (wr * 100).toFixed(0) + '%';
+        },
+
+        // Broker mapping status: bm = {ok: bool, assets: [{signal_asset,
+        // live_signal_asset, execution_asset, status}]}. Aggregate badge
+        // shows OK (all direct/proxy) vs FAIL (one missing).
+        bmBadgeClass(bm) {
+            if (!bm) return 'badge--sell';
+            if (!bm.ok) return 'badge--sell';
+            const hasProxy = (bm.assets || []).some(a => a.status === 'proxy');
+            return hasProxy ? 'badge--hold' : 'badge--buy';
+        },
+
+        bmBadgeText(bm) {
+            if (!bm) return 'n/a';
+            if (!bm.ok) return 'missing';
+            const hasProxy = (bm.assets || []).some(a => a.status === 'proxy');
+            return hasProxy ? 'proxy' : 'direct';
+        },
+
+        formatMapping(bm) {
+            if (!bm) return '';
+            const parts = [];
+            for (const a of bm.assets || []) {
+                if (a.status === 'missing') {
+                    parts.push(a.signal_asset + '=MISSING');
+                } else if (a.status === 'proxy' || a.execution_asset !== a.signal_asset) {
+                    parts.push(a.signal_asset + '→' + a.execution_asset);
+                }
+                // direct + same asset = do not show (noise)
+            }
+            return parts.join(' ');
+        },
+
+        async runPromotion() {
+            this.loading = true;
+            this.error = '';
+            this.artifact = null;
+            this.markdownHtml = '';
+            this.markdownArtifactId = '';
+            try {
+                const body = {
+                    strategies: this.form.strategies.filter(s => s && s.trim()),
+                    baseline: this.form.baseline || null,
+                    start: this.form.start,
+                    end: this.form.end || null,
+                    initial_capital: this.form.initial_capital,
+                    costs_pct: this.form.costs_pct,
+                    metric_basis: this.form.metric_basis,
+                    tax_enabled: this.form.tax_enabled,
+                    brokers: this.form.brokers,
+                    align: this.form.align,
+                    skip_failed: this.form.skip_failed,
+                    validate_data: this.form.validate_data,
+                    research_proxy_mode: this.form.research_proxy_mode,
+                };
+                const resp = await fetch('/api/v1/meta-promotion/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({detail: resp.statusText}));
+                    throw new Error(err.detail || ('HTTP ' + resp.status));
+                }
+                const data = await resp.json();
+                this.artifact = data.artifact;
+                this.view = 'tables';
+                this.loadArtifactList();
+            } catch (e) {
+                this.error = e.message || String(e);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async loadArtifactList() {
+            try {
+                const resp = await fetch('/api/v1/meta-promotion/list?limit=50');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                this.artifacts = data.artifacts || [];
+            } catch (e) {
+                // Silent — the list is optional.
+            }
+        },
+
+        async loadArtifactById(artifactId) {
+            this.loading = true;
+            this.error = '';
+            try {
+                const resp = await fetch('/api/v1/meta-promotion/' + encodeURIComponent(artifactId));
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({detail: resp.statusText}));
+                    throw new Error(err.detail || ('HTTP ' + resp.status));
+                }
+                const data = await resp.json();
+                this.artifact = data.artifact;
+                this.markdownHtml = '';
+                this.markdownArtifactId = '';
+                this.view = 'tables';
+            } catch (e) {
+                this.error = e.message || String(e);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async loadMarkdown() {
+            if (!this.artifact?.artifact_id) return;
+            if (this.markdownArtifactId === this.artifact.artifact_id && this.markdownHtml) return;
+            this.markdownLoading = true;
+            try {
+                const resp = await fetch('/api/v1/meta-promotion/' + encodeURIComponent(this.artifact.artifact_id) + '/markdown');
+                if (!resp.ok) {
+                    this.markdownHtml = '';
+                    return;
+                }
+                const text = await resp.text();
+                this.markdownHtml = window.marked ? marked.parse(text) : ('<pre>' + text.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) + '</pre>');
+                this.markdownArtifactId = this.artifact.artifact_id;
+            } catch (e) {
+                this.markdownHtml = '';
+            } finally {
+                this.markdownLoading = false;
+            }
+        },
+    };
+}
+</script>
+{% endblock %}

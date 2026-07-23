@@ -1,0 +1,9 @@
+ticker,release_date,snapshot_ts,feature_name,feature_value,source,dataset,raw_payload_hash
+AAPL,2026-05-13,2026-05-13T11:39:00Z,news_article_count,3,SyntheticNewsPIT,synthetic_news_pit,0bdb9ed4aa77a6397725abc2f511848c25b65285abc432c91e5725dc9e189442
+AAPL,2026-05-13,2026-05-13T11:39:00Z,news_engine_version,1,SyntheticNewsPIT,synthetic_news_pit,0bdb9ed4aa77a6397725abc2f511848c25b65285abc432c91e5725dc9e189442
+AAPL,2026-05-13,2026-05-13T11:39:00Z,news_sentiment_dispersion,0.04082482905,SyntheticNewsPIT,synthetic_news_pit,0bdb9ed4aa77a6397725abc2f511848c25b65285abc432c91e5725dc9e189442
+AAPL,2026-05-13,2026-05-13T11:39:00Z,news_sentiment_score,-0.277502,SyntheticNewsPIT,synthetic_news_pit,0bdb9ed4aa77a6397725abc2f511848c25b65285abc432c91e5725dc9e189442
+MSFT,2026-05-13,2026-05-13T11:39:00Z,news_article_count,3,SyntheticNewsPIT,synthetic_news_pit,0bdb9ed4aa77a6397725abc2f511848c25b65285abc432c91e5725dc9e189442
+MSFT,2026-05-13,2026-05-13T11:39:00Z,news_engine_version,1,SyntheticNewsPIT,synthetic_news_pit,0bdb9ed4aa77a6397725abc2f511848c25b65285abc432c91e5725dc9e189442
+MSFT,2026-05-13,2026-05-13T11:39:00Z,news_sentiment_dispersion,0.04082482905,SyntheticNewsPIT,synthetic_news_pit,0bdb9ed4aa77a6397725abc2f511848c25b65285abc432c91e5725dc9e189442
+MSFT,2026-05-13,2026-05-13T11:39:00Z,news_sentiment_score,0.121389,SyntheticNewsPIT,synthetic_news_pit,0bdb9ed4aa77a6397725abc2f511848c25b65285abc432c91e5725dc9e189442

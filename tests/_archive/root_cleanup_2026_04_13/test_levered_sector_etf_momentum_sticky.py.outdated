@@ -1,0 +1,97 @@
+from datetime import date
+
+import pandas as pd
+
+from strategies import LeveredSectorETFMomentumSticky as ExportedLeveredSectorETFMomentumSticky
+from strategies.levered_sector_etf_momentum_sticky import LeveredSectorETFMomentumSticky
+
+
+def test_sector_sticky_is_exported_in_strategy_package():
+    assert ExportedLeveredSectorETFMomentumSticky is LeveredSectorETFMomentumSticky
+
+
+def test_sector_sticky_allocates_to_mapped_3x_winner():
+    strategy = LeveredSectorETFMomentumSticky(
+        sector_map={"XLK": "TECL", "XLF": "FAS"},
+        lookback_days=3,
+        switch_buffer=0.05,
+        min_hold_periods=1,
+    )
+
+    data = pd.DataFrame(
+        {
+            "XLK": [100, 100, 110, 115, 130],
+            "TECL": [100, 100, 112, 120, 145],
+            "XLF": [100, 100, 103, 104, 105],
+            "FAS": [100, 100, 104, 105, 106],
+            "SPY": [100, 101, 102, 103, 104],
+        }
+    )
+
+    signal = strategy.signal(date(2026, 3, 22), data)
+
+    assert signal.weights == {"TECL": 1.0}
+
+
+def test_sector_sticky_falls_back_to_safe_asset_when_pair_is_incomplete():
+    strategy = LeveredSectorETFMomentumSticky(
+        sector_map={"XLK": "TECL"},
+        lookback_days=3,
+        safe_asset="SPY",
+    )
+
+    data = pd.DataFrame(
+        {
+            "XLK": [100, 100, 110, 120, 130],
+            "SPY": [100, 101, 102, 103, 104],
+        }
+    )
+
+    signal = strategy.signal(date(2026, 3, 22), data)
+
+    assert signal.weights == {"SPY": 1.0}
+
+
+def test_sector_sticky_respects_buffer_before_switching():
+    strategy = LeveredSectorETFMomentumSticky(
+        sector_map={"XLK": "TECL", "XLF": "FAS"},
+        lookback_days=3,
+        switch_buffer=0.05,
+        min_hold_periods=1,
+    )
+
+    first_data = pd.DataFrame(
+        {
+            "XLK": [100, 100, 110, 115, 130],
+            "TECL": [100, 100, 112, 120, 145],
+            "XLF": [100, 100, 103, 104, 105],
+            "FAS": [100, 100, 104, 105, 106],
+            "SPY": [100, 101, 102, 103, 104],
+        }
+    )
+    second_data = pd.DataFrame(
+        {
+            "XLK": [100, 100, 110, 115, 130, 120],
+            "TECL": [100, 100, 112, 120, 145, 132],
+            "XLF": [100, 100, 103, 106, 105, 116],
+            "FAS": [100, 100, 104, 108, 107, 123],
+            "SPY": [100, 101, 102, 103, 104, 105],
+        }
+    )
+    third_data = pd.DataFrame(
+        {
+            "XLK": [100, 100, 110, 115, 130, 120, 118],
+            "TECL": [100, 100, 112, 120, 145, 132, 128],
+            "XLF": [100, 100, 103, 106, 105, 116, 128],
+            "FAS": [100, 100, 104, 108, 107, 123, 140],
+            "SPY": [100, 101, 102, 103, 104, 105, 106],
+        }
+    )
+
+    first_signal = strategy.signal(date(2026, 3, 22), first_data)
+    second_signal = strategy.signal(date(2026, 4, 22), second_data)
+    third_signal = strategy.signal(date(2026, 5, 22), third_data)
+
+    assert first_signal.weights == {"TECL": 1.0}
+    assert second_signal.weights == {"TECL": 1.0}
+    assert third_signal.weights == {"FAS": 1.0}

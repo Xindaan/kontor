@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "entry_id": "mock_analyst-mockanalyst-2026-05-01-dbc4d6c79f0c",
+      "dataset": "mock_analyst",
+      "file_path": "data/external_features/snapshots/mock_analyst/2026-05-01.csv",
+      "source": "MockAnalyst",
+      "quality_tag": "proxy",
+      "as_of_date": "2026-05-01",
+      "import_method": "api_pull",
+      "license_tos_note": "synthetic test data; no real source",
+      "source_url": null,
+      "imported_at": "2026-05-12T18:02:06Z",
+      "checksum_sha256": "bdc74c9dc8564950f1ec0a16ffbef9264231284d17aa9e5813e1a5fa548eb84d",
+      "file_size_bytes": 633,
+      "row_count": 6,
+      "column_count": 8,
+      "notes": null,
+      "plan_policy": null,
+      "fresh_until": null,
+      "max_age_hours": null,
+      "cutoff_ts_utc": null
+    },
+    {
+      "entry_id": "synthetic_news_pit-syntheticnewspit-2026-05-13-2f1842b48cb4",
+      "dataset": "synthetic_news_pit",
+      "file_path": "data/external_features/snapshots/synthetic_news_pit/2026-05-13.csv",
+      "source": "SyntheticNewsPIT",
+      "quality_tag": "proxy",
+      "as_of_date": "2026-05-13",
+      "import_method": "api_pull",
+      "license_tos_note": "synthetic sentiment derived from price seeds; no real source.",
+      "source_url": null,
+      "imported_at": "2026-05-13T11:39:00Z",
+      "checksum_sha256": "5b7ef4b2167f4b6268aabacee203785f00e94731a251ec05a87e99f4ad9033bd",
+      "file_size_bytes": 1422,
+      "row_count": 8,
+      "column_count": 8,
+      "notes": null,
+      "plan_policy": "synthetic_proxy",
+      "fresh_until": null,
+      "max_age_hours": null,
+      "cutoff_ts_utc": "17:00"
+    }
+  ]
+}

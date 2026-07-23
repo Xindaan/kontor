@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - Kontor</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231e293b'/%3E%3Cpath d='M6 22L12 14L18 18L26 8' stroke='%2322c55e' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='26' cy='8' r='2' fill='%2322c55e'/%3E%3C/svg%3E">
+
+    <!-- Fonts: Inter (UI) + JetBrains Mono (Numbers) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'monospace'],
+                    },
+                    colors: {
+                        nav: { DEFAULT: '#1e293b', hover: '#334155' },
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- Alpine.js with Collapse plugin -->
+    <script defer src="https://unpkg.com/@alpinejs/collapse@3.13.3/dist/cdn.min.js"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js"></script>
+
+    <!-- Plotly for charts -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+    <!-- Design System -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="min-h-screen flex flex-col" x-data="{ mobileMenu: false }">
+    <!-- Navigation -->
+    <nav class="bg-slate-800 text-white border-b border-slate-700">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between items-center h-14">
+                <div class="flex items-center space-x-8">
+                    <a href="/" class="flex items-center space-x-2">
+                        <svg class="w-6 h-6 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="4 16 8 10 14 14 20 6"/>
+                            <circle cx="20" cy="6" r="1.5" fill="currentColor"/>
+                        </svg>
+                        <span class="text-base font-semibold tracking-tight">Kontor</span>
+                    </a>
+                    <!-- Desktop Nav -->
+                    <div class="hidden md:flex items-center space-x-1">
+                        <!-- Primary -->
+                        <a href="/run"
+                           class="px-3 py-1.5 rounded text-sm font-medium transition-colors
+                                  {% if page_title == 'Run Backtest' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">
+                            Run
+                        </a>
+                        <a href="/signals"
+                           class="px-3 py-1.5 rounded text-sm font-medium transition-colors
+                                  {% if page_title == 'Signals' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">
+                            Signals
+                        </a>
+                        <a href="/compare"
+                           class="px-3 py-1.5 rounded text-sm font-medium transition-colors
+                                  {% if page_title == 'Compare Strategies' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">
+                            Compare
+                        </a>
+                        <!-- Separator -->
+                        <span class="text-slate-600 mx-1">|</span>
+                        <!-- Analysis -->
+                        <a href="/sweep"
+                           class="px-3 py-1.5 rounded text-sm font-medium transition-colors
+                                  {% if page_title == 'Sweep Analysis' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">
+                            Sweep
+                        </a>
+                        <a href="/optimize"
+                           class="px-3 py-1.5 rounded text-sm font-medium transition-colors
+                                  {% if page_title == 'Optimize' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">
+                            Optimize
+                        </a>
+                        <a href="/batch-optimize"
+                           class="px-3 py-1.5 rounded text-sm font-medium transition-colors
+                                  {% if page_title == 'Batch Optimize' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">
+                            Batch
+                        </a>
+                        <a href="/playbook"
+                           class="px-3 py-1.5 rounded text-sm font-medium transition-colors
+                                  {% if page_title == 'Meta-Playbook' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">
+                            Playbook
+                        </a>
+                        <!-- Separator -->
+                        <span class="text-slate-600 mx-1">|</span>
+                        <!-- Data -->
+                        <a href="/manual-data"
+                           class="px-3 py-1.5 rounded text-sm font-medium transition-colors
+                                  {% if page_title == 'Manual Data' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">
+                            Data
+                        </a>
+                    </div>
+                </div>
+                <!-- Mobile Menu Button -->
+                <button @click="mobileMenu = !mobileMenu"
+                        class="md:hidden p-2 rounded text-slate-300 hover:text-white hover:bg-slate-700"
+                        aria-label="Toggle menu">
+                    <svg x-show="!mobileMenu" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <svg x-show="mobileMenu" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <!-- Mobile Nav -->
+        <div x-show="mobileMenu" x-cloak x-collapse class="md:hidden border-t border-slate-700">
+            <div class="px-4 py-3 space-y-1">
+                <a href="/run" class="block px-3 py-2 rounded text-sm font-medium {% if page_title == 'Run Backtest' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">Run Backtest</a>
+                <a href="/signals" class="block px-3 py-2 rounded text-sm font-medium {% if page_title == 'Signals' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">Signals</a>
+                <a href="/compare" class="block px-3 py-2 rounded text-sm font-medium {% if page_title == 'Compare Strategies' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">Compare</a>
+                <hr class="border-slate-700 my-1">
+                <a href="/sweep" class="block px-3 py-2 rounded text-sm font-medium {% if page_title == 'Sweep Analysis' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">Sweep Analysis</a>
+                <a href="/optimize" class="block px-3 py-2 rounded text-sm font-medium {% if page_title == 'Optimize' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">Optimize</a>
+                <a href="/batch-optimize" class="block px-3 py-2 rounded text-sm font-medium {% if page_title == 'Batch Optimize' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">Batch Optimize</a>
+                <a href="/playbook" class="block px-3 py-2 rounded text-sm font-medium {% if page_title == 'Meta-Playbook' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">Meta-Playbook</a>
+                <hr class="border-slate-700 my-1">
+                <a href="/manual-data" class="block px-3 py-2 rounded text-sm font-medium {% if page_title == 'Manual Data' %}bg-slate-700 text-white{% else %}text-slate-300 hover:text-white hover:bg-slate-700{% endif %}">Manual Data</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Breadcrumb -->
+    {% if page_title != 'Dashboard' %}
+    <div class="max-w-7xl mx-auto px-4 pt-4">
+        <div class="breadcrumb">
+            <a href="/">Home</a>
+            <span class="breadcrumb__separator">/</span>
+            <span class="text-slate-500">{{ page_title }}</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-1">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-200 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between text-xs text-slate-400">
+            <span>Kontor</span>
+            <span>Web UI v1.0</span>
+        </div>
+    </footer>
+
+    <script src="/static/js/app.js"></script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
