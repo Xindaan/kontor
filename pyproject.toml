@@ -1,0 +1,85 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "kontor"
+version = "0.1.0"
+description = "Kontor — tax-aware, point-in-time backtesting for German investors, with German capital-gains tax modelling and plan-only broker order derivation."
+authors = ["André"]
+readme = "README.md"
+packages = [{include = "backtest", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pandas = "^2.0.0"
+numpy = "^1.24.0"
+yfinance = "^0.2.0"
+jinja2 = "^3.1.0"
+plotly = "^5.18.0"
+requests = "^2.31.0"
+pdfplumber = "^0.10.0"
+beautifulsoup4 = "^4.12.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+
+[tool.poetry.group.web]
+optional = true
+
+[tool.poetry.group.web.dependencies]
+fastapi = "^0.109.0"
+uvicorn = "^0.27.0"
+python-multipart = "^0.0.6"
+
+# Phase C: lightweight sentiment engine. NLTK ships the VADER lexicon
+# but the lexicon itself must be downloaded once via
+# `python -m nltk.downloader vader_lexicon` (no runtime download).
+[tool.poetry.group.sentiment]
+optional = true
+
+[tool.poetry.group.sentiment.dependencies]
+nltk = "^3.8"
+
+# Phase C: optional heavyweight engine. Pulls torch and transformers
+# (large download); install only when FinBERT-grade sentiment is needed.
+[tool.poetry.group.sentiment-finbert]
+optional = true
+
+[tool.poetry.group.sentiment-finbert.dependencies]
+transformers = "^4.40"
+torch = "^2.2"
+
+# Phase D: ML-Forecast pipeline (LightGBM, xgboost, sklearn). Core code
+# imports these lazily so Phase A/B/C tests stay green without this
+# group installed. Reale Modell-Tests sind via pytest marker
+# `ml_extras` separat ausfuehrbar.
+[tool.poetry.group.ml]
+optional = true
+
+[tool.poetry.group.ml.dependencies]
+lightgbm = "^4.0"
+xgboost = "^2.0"
+scikit-learn = "^1.3"
+
+[tool.poetry.scripts]
+backtest = "backtest.cli:app"
+backtest-constituents = "backtest.constituents.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "no_network: marks tests that must not perform network IO",
+    "ml_extras: marks tests that need lightgbm/xgboost/sklearn (poetry --with ml)",
+    "dl_extras: marks tests that need pytorch (poetry --with dl) — Phase E3",
+    "live_extras: marks tests that need alpaca-py (poetry --with live) — Phase E2",
+]
+filterwarnings = [
+    "ignore:np.find_common_type is deprecated.*:DeprecationWarning",
+    "ignore:\\[WARNING\\] \\[metrics\\] Sortino ratio is not finite:UserWarning",
+    "ignore:\\[WARNING\\] \\[gross\\.metrics\\] Sortino ratio is not finite:UserWarning",
+    "ignore:\\[WARNING\\] \\[invariant\\] effective_tax_rate exceeds nominal tax rate.*:UserWarning",
+    "ignore:PIT universe CSV not found.*:UserWarning",
+]

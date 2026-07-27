@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="manualDataPage()" x-init="init()" class="space-y-6">
+    <div class="card">
+        <div class="px-6 py-4 border-b">
+            <h1 class="text-xl font-semibold text-gray-900">Manual Data Provenance</h1>
+            <p class="text-sm text-gray-600 mt-1">
+                Register manual imports (including SeekingAlpha exports) with source, quality tag, and ToS notes.
+            </p>
+        </div>
+        <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">File Path</label>
+                    <input type="text" x-model="form.file_path"
+                           class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="data/manual/seekingalpha/export.csv">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Dataset</label>
+                    <input type="text" x-model="form.dataset"
+                           class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="fundamentals_sp500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Source</label>
+                    <input type="text" x-model="form.source"
+                           class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="SeekingAlpha">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Quality Tag</label>
+                    <select x-model="form.quality_tag"
+                            class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="manual">manual</option>
+                        <option value="official">official</option>
+                        <option value="proxy">proxy</option>
+                        <option value="community">community</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">As-of Date</label>
+                    <input type="date" x-model="form.as_of_date"
+                           class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Import Method</label>
+                    <input type="text" x-model="form.import_method"
+                           class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="manual_csv_export">
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">License / ToS Note</label>
+                    <input type="text" x-model="form.license_tos_note"
+                           class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="Manual export from personal subscription; ToS compliant use only.">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Source URL (optional)</label>
+                    <input type="text" x-model="form.source_url"
+                           class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="https://seekingalpha.com/...">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+                    <input type="text" x-model="form.notes"
+                           class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="Universe filtered to large-cap only">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <label class="flex items-center text-sm text-gray-700">
+                    <input type="checkbox" x-model="seekingAlphaDefaults"
+                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                    Apply SeekingAlpha defaults
+                </label>
+                <button @click="createEntry" :disabled="loading"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                    Add Provenance Entry
+                </button>
+            </div>
+
+            <div x-show="error" x-cloak class="bg-red-50 border border-red-200 text-red-700 rounded-md p-3 text-sm" x-text="error"></div>
+            <div x-show="success" x-cloak class="bg-green-50 border border-green-200 text-green-700 rounded-md p-3 text-sm" x-text="success"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="px-6 py-4 border-b flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900">Registered Entries</h2>
+            <button @click="loadEntries" :disabled="loading"
+                    class="px-3 py-1.5 border rounded-md text-sm hover:bg-gray-50 disabled:opacity-50">
+                Refresh
+            </button>
+        </div>
+        <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">Filter Dataset</label>
+                    <input type="text" x-model="filters.dataset"
+                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="fundamentals_sp500">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">Filter Source</label>
+                    <input type="text" x-model="filters.source"
+                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="SeekingAlpha">
+                </div>
+                <div class="flex items-end">
+                    <label class="flex items-center text-sm text-gray-700">
+                        <input type="checkbox" x-model="filters.skip_hash"
+                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                        Verify without checksum (existence only)
+                    </label>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div class="bg-gray-50 rounded-md p-3">
+                    <div class="text-xs text-gray-500">Total</div>
+                    <div class="text-lg font-semibold" x-text="verify.total_entries ?? '-'"></div>
+                </div>
+                <div class="bg-gray-50 rounded-md p-3">
+                    <div class="text-xs text-gray-500">OK</div>
+                    <div class="text-lg font-semibold text-green-700" x-text="verify.ok_entries ?? '-'"></div>
+                </div>
+                <div class="bg-gray-50 rounded-md p-3">
+                    <div class="text-xs text-gray-500">Issues</div>
+                    <div class="text-lg font-semibold text-red-700" x-text="verify.issue_count ?? '-'"></div>
+                </div>
+                <div class="bg-gray-50 rounded-md p-3">
+                    <div class="text-xs text-gray-500">Registry</div>
+                    <div class="text-xs font-mono text-gray-700 truncate" :title="verify.registry_path" x-text="verify.registry_path || '-'"></div>
+                </div>
+            </div>
+
+            <div x-show="verify.issues && verify.issues.length > 0" x-cloak class="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+                <div class="text-sm font-medium text-yellow-800 mb-2">Verification Issues</div>
+                <template x-for="issue in verify.issues" :key="issue.entry_id + issue.status">
+                    <div class="text-sm text-yellow-900">
+                        <span class="font-mono" x-text="issue.entry_id"></span>
+                        <span x-text="' - ' + issue.status + ': ' + issue.message"></span>
+                    </div>
+                </template>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="text-left border-b">
+                        <tr>
+                            <th class="py-2 pr-4">Entry ID</th>
+                            <th class="py-2 pr-4">Dataset</th>
+                            <th class="py-2 pr-4">Source</th>
+                            <th class="py-2 pr-4">Tag</th>
+                            <th class="py-2 pr-4">As-of</th>
+                            <th class="py-2 pr-4">Imported</th>
+                            <th class="py-2 pr-4">File</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="entry in entries" :key="entry.entry_id">
+                            <tr class="border-b hover:bg-gray-50 cursor-pointer"
+                                @click="selectEntry(entry.entry_id)">
+                                <td class="py-2 pr-4 font-mono text-xs" x-text="entry.entry_id"></td>
+                                <td class="py-2 pr-4" x-text="entry.dataset"></td>
+                                <td class="py-2 pr-4" x-text="entry.source"></td>
+                                <td class="py-2 pr-4" x-text="entry.quality_tag"></td>
+                                <td class="py-2 pr-4" x-text="entry.as_of_date || '-'"></td>
+                                <td class="py-2 pr-4" x-text="entry.imported_at"></td>
+                                <td class="py-2 pr-4 text-xs font-mono" x-text="entry.file_path"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="entries.length === 0">
+                            <td colspan="7" class="py-4 text-gray-500">No entries yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div x-show="selectedEntry" x-cloak class="bg-gray-50 border rounded-md p-4">
+                <h3 class="text-sm font-semibold text-gray-900 mb-2">Selected Entry</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                    <div><span class="font-medium">Entry ID:</span> <span class="font-mono" x-text="selectedEntry?.entry_id"></span></div>
+                    <div><span class="font-medium">Dataset:</span> <span x-text="selectedEntry?.dataset"></span></div>
+                    <div><span class="font-medium">Source:</span> <span x-text="selectedEntry?.source"></span></div>
+                    <div><span class="font-medium">Quality:</span> <span x-text="selectedEntry?.quality_tag"></span></div>
+                    <div><span class="font-medium">As-of:</span> <span x-text="selectedEntry?.as_of_date || '-'"></span></div>
+                    <div><span class="font-medium">Imported:</span> <span x-text="selectedEntry?.imported_at"></span></div>
+                    <div><span class="font-medium">Rows:</span> <span x-text="selectedEntry?.row_count ?? '-'"></span></div>
+                    <div><span class="font-medium">Cols:</span> <span x-text="selectedEntry?.column_count ?? '-'"></span></div>
+                    <div class="md:col-span-2"><span class="font-medium">File:</span> <span class="font-mono text-xs" x-text="selectedEntry?.file_path"></span></div>
+                    <div class="md:col-span-2"><span class="font-medium">Import Method:</span> <span x-text="selectedEntry?.import_method"></span></div>
+                    <div class="md:col-span-2"><span class="font-medium">License/ToS:</span> <span x-text="selectedEntry?.license_tos_note || '-'"></span></div>
+                    <div class="md:col-span-2" x-show="selectedEntry?.source_url">
+                        <span class="font-medium">Source URL:</span>
+                        <a :href="selectedEntry?.source_url" target="_blank" class="text-blue-600 hover:underline" x-text="selectedEntry?.source_url"></a>
+                    </div>
+                    <div class="md:col-span-2"><span class="font-medium">Notes:</span> <span x-text="selectedEntry?.notes || '-'"></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function manualDataPage() {
+    return {
+        loading: false,
+        error: "",
+        success: "",
+        seekingAlphaDefaults: false,
+        entries: [],
+        selectedEntry: null,
+        verify: {},
+        filters: {
+            dataset: "",
+            source: "",
+            skip_hash: false,
+        },
+        form: {
+            file_path: "",
+            dataset: "",
+            source: "",
+            quality_tag: "manual",
+            as_of_date: "",
+            import_method: "manual_upload",
+            license_tos_note: "",
+            source_url: "",
+            notes: "",
+        },
+
+        async init() {
+            await this.loadEntries();
+        },
+
+        applySeekingAlphaDefaults() {
+            if (!this.seekingAlphaDefaults) {
+                return;
+            }
+            if (!this.form.source) {
+                this.form.source = "SeekingAlpha";
+            }
+            if (!this.form.import_method || this.form.import_method === "manual_upload") {
+                this.form.import_method = "manual_csv_export";
+            }
+            if (!this.form.license_tos_note) {
+                this.form.license_tos_note =
+                    "Manual export from personal SeekingAlpha access; use only in compliance with SeekingAlpha ToS.";
+            }
+        },
+
+        async createEntry() {
+            this.error = "";
+            this.success = "";
+            this.applySeekingAlphaDefaults();
+            this.loading = true;
+            try {
+                const payload = {
+                    ...this.form,
+                    as_of_date: this.form.as_of_date || null,
+                    source_url: this.form.source_url || null,
+                    notes: this.form.notes || null,
+                };
+                const response = await fetch("/api/v1/data/manual/provenance", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || "Failed to create provenance entry");
+                }
+                this.success = `Entry created: ${data.entry_id}`;
+                await this.loadEntries();
+                await this.selectEntry(data.entry_id);
+            } catch (err) {
+                this.error = err.message || "Unexpected error";
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async loadEntries() {
+            this.loading = true;
+            try {
+                const query = new URLSearchParams();
+                if (this.filters.dataset) {
+                    query.set("dataset", this.filters.dataset);
+                }
+                if (this.filters.source) {
+                    query.set("source", this.filters.source);
+                }
+                const listUrl = query.toString()
+                    ? `/api/v1/data/manual/provenance?${query.toString()}`
+                    : "/api/v1/data/manual/provenance";
+                const verifyUrl = this.filters.skip_hash
+                    ? "/api/v1/data/manual/provenance/verify?skip_hash=true"
+                    : "/api/v1/data/manual/provenance/verify";
+
+                const [entriesResp, verifyResp] = await Promise.all([
+                    fetch(listUrl),
+                    fetch(verifyUrl),
+                ]);
+                const entriesData = await entriesResp.json();
+                const verifyData = await verifyResp.json();
+
+                if (!entriesResp.ok) {
+                    throw new Error(entriesData.detail || "Failed to load provenance entries");
+                }
+                if (!verifyResp.ok) {
+                    throw new Error(verifyData.detail || "Failed to verify provenance entries");
+                }
+                this.entries = entriesData.entries || [];
+                this.verify = verifyData;
+                if (this.selectedEntry) {
+                    const stillVisible = this.entries.some((e) => e.entry_id === this.selectedEntry.entry_id);
+                    if (!stillVisible) {
+                        this.selectedEntry = null;
+                    }
+                }
+            } catch (err) {
+                this.error = err.message || "Unexpected error";
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async selectEntry(entryId) {
+            this.error = "";
+            try {
+                const response = await fetch(`/api/v1/data/manual/provenance/${encodeURIComponent(entryId)}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || "Failed to load provenance entry");
+                }
+                this.selectedEntry = data;
+            } catch (err) {
+                this.error = err.message || "Unexpected error";
+            }
+        },
+    };
+}
+</script>
+{% endblock %}

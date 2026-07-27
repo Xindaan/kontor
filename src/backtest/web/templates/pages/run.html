@@ -1,0 +1,1178 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="backtest()" class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-gray-900">Run Backtest</h1>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Form -->
+        <div class="lg:col-span-1">
+            <form @submit.prevent="runBacktest" novalidate class="card">
+                <div class="px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Configuration</h2>
+                </div>
+
+                <div class="p-6 space-y-4">
+                    <!-- Strategy Selection -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Strategy</label>
+                        <select
+                            x-model="form.strategy"
+                            @change="loadStrategySchema"
+                            class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                            required>
+                            <option value="">Select a strategy...</option>
+                            {% for strategy in strategies %}
+                            <option value="{{ strategy.file_path }}"
+                                    {% if selected_strategy == strategy.file_path %}selected{% endif %}>
+                                {{ strategy.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Date Range -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                            <input type="date"
+                                   x-model="form.start_date"
+                                   class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                            <input type="date"
+                                   x-model="form.end_date"
+                                   class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+
+                    <!-- Capital -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Initial Capital (EUR)</label>
+                        <input type="number"
+                               x-model.number="form.initial_capital"
+                               min="100"
+                               step="100"
+                               class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <!-- Rebalance Frequency -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Rebalance Frequency</label>
+                        <select
+                            x-model="form.rebalance_frequency"
+                            class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="quarterly">Quarterly</option>
+                            <option value="yearly">Yearly</option>
+                        </select>
+                    </div>
+
+                    <!-- Strategy Parameters (dynamic) -->
+                    <div x-show="strategySchema && strategySchema.parameters && strategySchema.parameters.length > 0"
+                         x-cloak
+                         class="border-t pt-4 mt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Strategy Parameters</h3>
+                        <div class="space-y-3">
+                            <template x-for="param in strategySchema?.parameters || []" :key="param.name">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1" x-text="param.name"></label>
+                                    <!-- Choice/Enum -->
+                                    <template x-if="param.choices">
+                                        <select
+                                            x-model="form.params[param.name]"
+                                            class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                            <template x-for="choice in param.choices" :key="choice">
+                                                <option :value="choice" x-text="choice"></option>
+                                            </template>
+                                        </select>
+                                    </template>
+                                    <!-- Boolean -->
+                                    <template x-if="param.type === 'boolean' && !param.choices">
+                                        <input type="checkbox"
+                                               x-model="form.params[param.name]"
+                                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                    </template>
+                                    <!-- Number -->
+                                    <template x-if="(param.type === 'integer' || param.type === 'number') && !param.choices">
+                                        <input type="number"
+                                               x-model.number="form.params[param.name]"
+                                               :step="param.type === 'integer' ? 1 : 0.01"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </template>
+                                    <!-- String/Other -->
+                                    <template x-if="param.type === 'string' && !param.choices">
+                                        <input type="text"
+                                               x-model="form.params[param.name]"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options (collapsed) -->
+                    <div class="border-t pt-4 mt-4" x-data="{ advOpen: false }">
+                        <button type="button" @click="advOpen = !advOpen" class="collapsible-trigger w-full">
+                            <span class="text-sm font-medium">Advanced Options</span>
+                            <svg class="collapsible-arrow" :class="advOpen && 'collapsible-arrow--open'" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <div x-show="advOpen" x-collapse class="mt-4 space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Preset Profile</label>
+                                <select
+                                    x-model="form.preset_profile"
+                                    @change="applyPresetProfile"
+                                    class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="">Custom / No Preset</option>
+                                    <option value="research">Research (Fast)</option>
+                                    <option value="realistic">Realistic (Core)</option>
+                                    <option value="defensive">Defensive (Strict)</option>
+                                </select>
+                                <p class="text-xs text-gray-500 mt-1">Fills execution and risk defaults; you can still adjust fields afterwards.</p>
+                            </div>
+
+                            <!-- Benchmark -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Benchmark</label>
+                                <input type="text"
+                                       x-model="form.benchmark"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+
+                            <div class="section-label">Execution</div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Transaction Costs (%)</label>
+                                <input type="number"
+                                       x-model.number="form.costs_pct"
+                                       step="0.001"
+                                       min="0"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Execution Lag (days)</label>
+                                    <input type="number"
+                                           x-model.number="form.execution_lag_days"
+                                           min="0"
+                                           step="1"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Max Volume Participation</label>
+                                    <input type="number"
+                                           x-model.number="form.max_volume_participation"
+                                           min="0"
+                                           max="1"
+                                           step="0.01"
+                                           placeholder="0.10 = 10%"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Min Daily $ Volume</label>
+                                    <input type="number"
+                                           x-model.number="form.min_daily_dollar_volume"
+                                           min="0"
+                                           step="1000"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Missing Volume</label>
+                                    <select
+                                        x-model="form.liquidity_on_missing_volume"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="allow">Allow Trade</option>
+                                        <option value="skip">Skip Trade</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="border-t pt-3">
+                                <div class="section-label">Risk Overlays</div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Max Position</label>
+                                        <input type="number"
+                                               x-model.number="form.max_position"
+                                               min="0"
+                                               max="1"
+                                               step="0.01"
+                                               placeholder="0.25 = 25%"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Turnover Budget</label>
+                                        <input type="number"
+                                               x-model.number="form.turnover_budget"
+                                               min="0"
+                                               max="1"
+                                               step="0.01"
+                                               placeholder="0.20 = 20%"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <label class="block text-sm text-gray-600 mb-1">Sector Caps</label>
+                                    <input type="text"
+                                           x-model="form.sector_caps_text"
+                                           placeholder="equity=0.6, bonds=0.4"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div class="mt-3">
+                                    <label class="block text-sm text-gray-600 mb-1">Ticker Sectors</label>
+                                    <textarea
+                                        x-model="form.ticker_sectors_text"
+                                        rows="2"
+                                        placeholder="SPY=equity, BND=bonds"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                                </div>
+                                <div class="grid grid-cols-3 gap-3 mt-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Brake Threshold</label>
+                                        <input type="number"
+                                               x-model.number="form.drawdown_brake_threshold"
+                                               min="0"
+                                               max="1"
+                                               step="0.01"
+                                               placeholder="0.15"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Brake Cash</label>
+                                        <input type="number"
+                                               x-model.number="form.drawdown_brake_cash_target"
+                                               min="0"
+                                               max="1"
+                                               step="0.01"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Release</label>
+                                        <input type="number"
+                                               x-model.number="form.drawdown_brake_release"
+                                               min="0"
+                                               max="1"
+                                               step="0.01"
+                                               placeholder="0.08"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tax Settings -->
+                            <div class="border-t pt-3 space-y-2">
+                                <div class="section-label">Tax</div>
+                                <div class="flex items-center">
+                                    <input type="checkbox"
+                                           x-model="form.tax_enabled"
+                                           id="tax_enabled"
+                                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                    <label for="tax_enabled" class="ml-2 text-sm text-gray-700">Enable German Tax</label>
+                                </div>
+
+                                <div x-show="form.tax_enabled" x-cloak class="pl-6 space-y-2">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Tax Exemption (EUR)</label>
+                                        <input type="number"
+                                               x-model.number="form.tax_exemption"
+                                               step="1"
+                                               min="0"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Metric Basis</label>
+                                        <select
+                                            x-model="form.metric_basis"
+                                            class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                            <option value="gross">Gross</option>
+                                            <option value="net_realized">Net Realized</option>
+                                            <option value="net_liquidation">Net Liquidation</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- DRIP -->
+                            <div class="flex items-center">
+                                <input type="checkbox"
+                                       x-model="form.drip_enabled"
+                                       id="drip_enabled"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="drip_enabled" class="ml-2 text-sm text-gray-700">Enable Dividend Reinvestment (DRIP)</label>
+                            </div>
+
+                            <!-- Skip Failed -->
+                            <div class="flex items-center">
+                                <input type="checkbox"
+                                       x-model="form.skip_failed"
+                                       id="skip_failed"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="skip_failed" class="ml-2 text-sm text-gray-700">Skip Failed Ticker Downloads</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="px-6 py-4 bg-gray-50 border-t rounded-b-lg">
+                    <button type="submit"
+                            :disabled="loading || !form.strategy"
+                            class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                        <span x-show="!loading">Run Backtest</span>
+                        <span x-show="loading" x-cloak class="flex items-center">
+                            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Running...
+                        </span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Results -->
+        <div class="lg:col-span-2">
+            <!-- Loading State with Progress -->
+            <div x-show="loading" x-cloak class="card p-6">
+                <div class="flex items-center space-x-4">
+                    <svg class="animate-spin h-8 w-8 text-blue-600 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold text-gray-900">Running Backtest</h3>
+                        <p class="text-sm text-gray-600" x-text="progressSummary"></p>
+                        <div class="progress-bar mt-2" x-show="progressData?.percent > 0">
+                            <div class="progress-bar__fill" :style="'width: ' + (progressData?.percent || 0) + '%'"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1 font-mono">
+                            Elapsed: <span x-text="formatDuration(elapsedSeconds)"></span>
+                        </p>
+                        <button type="button"
+                                class="mt-3 text-xs text-red-600 hover:text-red-800 font-medium"
+                                x-show="!cancelRequested"
+                                @click="cancelRun">
+                            Cancel Backtest
+                        </button>
+                        <p class="text-xs text-gray-500 mt-2" x-show="cancelRequested">Cancellation requested...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div x-show="error" x-cloak class="alert--error">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-red-800 font-semibold mb-1">Error</h3>
+                        <p class="text-red-600 text-sm" x-text="error"></p>
+                    </div>
+                    <button type="button" @click="error = null" class="text-red-400 hover:text-red-600 ml-4 flex-shrink-0">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div x-show="result && !loading" x-cloak class="space-y-6">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="kpi-card kpi-card--neutral">
+                        <div class="text-sm text-gray-500">Final Value</div>
+                        <div class="text-xl font-bold font-mono text-gray-900" x-text="formatCurrency(result?.final_value)"></div>
+                    </div>
+                    <div class="kpi-card" :class="result?.metrics?.cagr >= 0 ? 'kpi-card--positive' : 'kpi-card--negative'">
+                        <div class="text-sm text-gray-500">CAGR</div>
+                        <div class="text-xl font-bold font-mono"
+                             :class="result?.metrics?.cagr >= 0 ? 'text-green-600' : 'text-red-600'"
+                             x-text="formatPercent(result?.metrics?.cagr)"></div>
+                    </div>
+                    <div class="kpi-card" :class="(result?.metrics?.sharpe_ratio ?? 0) >= 1 ? 'kpi-card--positive' : 'kpi-card--neutral'">
+                        <div class="text-sm text-gray-500">Sharpe Ratio</div>
+                        <div class="text-xl font-bold font-mono text-gray-900" x-text="formatNumber(result?.metrics?.sharpe_ratio)"></div>
+                    </div>
+                    <div class="kpi-card kpi-card--negative">
+                        <div class="text-sm text-gray-500">Max Drawdown</div>
+                        <div class="text-xl font-bold font-mono text-red-600" x-text="formatPercent(result?.metrics?.max_drawdown)"></div>
+                    </div>
+                </div>
+
+                <!-- Equity Chart -->
+                <div class="card">
+                    <div class="px-6 py-4 border-b">
+                        <h3 class="text-lg font-semibold text-gray-900">Equity Curve</h3>
+                    </div>
+                    <div id="equity-chart" class="p-4" style="height: 400px;"></div>
+                </div>
+
+                <!-- Gross vs Net Comparison (if tax enabled) -->
+                <div x-show="result?.tax_enabled && result?.tax_summary" x-cloak class="card">
+                    <div class="px-6 py-4 border-b">
+                        <h3 class="text-lg font-semibold text-gray-900">Gross vs Net Comparison</h3>
+                    </div>
+                    <div class="p-6 overflow-x-auto">
+                        <table class="min-w-full text-sm">
+                            <thead>
+                                <tr class="border-b">
+                                    <th class="text-left py-2 px-3 text-gray-500 font-medium">Metric</th>
+                                    <th class="text-right py-2 px-3 text-gray-500 font-medium">Gross</th>
+                                    <th class="text-right py-2 px-3 text-gray-500 font-medium">Net (Realized)</th>
+                                    <th class="text-right py-2 px-3 text-gray-500 font-medium">Net (Liquidation)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="py-2 px-3 text-gray-700">Final Value</td>
+                                    <td class="text-right py-2 px-3 font-medium" x-text="formatCurrency(result?.tax_summary?.final_value_gross)"></td>
+                                    <td class="text-right py-2 px-3" x-text="formatCurrency(result?.tax_summary?.final_value_net_realized)"></td>
+                                    <td class="text-right py-2 px-3" x-text="formatCurrency(result?.tax_summary?.final_value_net_liquidation)"></td>
+                                </tr>
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="py-2 px-3 text-gray-700">CAGR</td>
+                                    <td class="text-right py-2 px-3 font-medium"
+                                        :class="(result?.tax_summary?.cagr_gross || 0) >= 0 ? 'text-green-600' : 'text-red-600'"
+                                        x-text="formatPercent(result?.tax_summary?.cagr_gross)"></td>
+                                    <td class="text-right py-2 px-3"
+                                        :class="(result?.tax_summary?.cagr_net_realized || 0) >= 0 ? 'text-green-600' : 'text-red-600'"
+                                        x-text="formatPercent(result?.tax_summary?.cagr_net_realized)"></td>
+                                    <td class="text-right py-2 px-3"
+                                        :class="(result?.tax_summary?.cagr_net_liquidation || 0) >= 0 ? 'text-green-600' : 'text-red-600'"
+                                        x-text="formatPercent(result?.tax_summary?.cagr_net_liquidation)"></td>
+                                </tr>
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="py-2 px-3 text-gray-700">Sharpe Ratio</td>
+                                    <td class="text-right py-2 px-3 font-medium" x-text="formatNumber(result?.metrics_gross?.sharpe_ratio)"></td>
+                                    <td class="text-right py-2 px-3" x-text="formatNumber(result?.metrics?.sharpe_ratio)"></td>
+                                    <td class="text-right py-2 px-3"
+                                        :class="result?.metrics_net?.sharpe_ratio === result?.metrics_gross?.sharpe_ratio ? 'text-gray-400' : ''"
+                                        x-text="formatNumber(result?.metrics_net?.sharpe_ratio || result?.metrics?.sharpe_ratio)"></td>
+                                </tr>
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="py-2 px-3 text-gray-700">Max Drawdown</td>
+                                    <td class="text-right py-2 px-3 font-medium text-red-600" x-text="formatPercent(result?.metrics_gross?.max_drawdown)"></td>
+                                    <td class="text-right py-2 px-3 text-red-600" x-text="formatPercent(result?.metrics?.max_drawdown)"></td>
+                                    <td class="text-right py-2 px-3"
+                                        :class="result?.metrics_net?.max_drawdown === result?.metrics_gross?.max_drawdown ? 'text-gray-400' : 'text-red-600'"
+                                        x-text="formatPercent(result?.metrics_net?.max_drawdown || result?.metrics?.max_drawdown)"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p class="text-xs text-gray-400 mt-2">Note: Grayed values indicate no difference from Gross (no taxes paid during backtest period).</p>
+                    </div>
+                </div>
+
+                <!-- Detailed Metrics -->
+                <div class="card">
+                    <div class="px-6 py-4 border-b">
+                        <h3 class="text-lg font-semibold text-gray-900">Detailed Metrics</h3>
+                    </div>
+                    <div class="p-6">
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div>
+                                <div class="text-sm text-gray-500">Total Return</div>
+                                <div class="font-medium font-mono" x-text="formatPercent(result?.metrics?.total_return)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Volatility</div>
+                                <div class="font-medium font-mono" x-text="formatPercent(result?.metrics?.volatility)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Sortino Ratio</div>
+                                <div class="font-medium font-mono" x-text="formatNumber(result?.metrics?.sortino_ratio)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Calmar Ratio</div>
+                                <div class="font-medium font-mono" x-text="formatNumber(result?.metrics?.calmar_ratio)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Max DD Duration</div>
+                                <div class="font-medium font-mono" x-text="result?.metrics?.max_drawdown_duration + ' days'"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Win Rate (Monthly)</div>
+                                <div class="font-medium font-mono" x-text="formatPercent(result?.metrics?.win_rate_monthly)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Best Month</div>
+                                <div class="font-medium font-mono text-green-600" x-text="formatPercent(result?.metrics?.best_month)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Worst Month</div>
+                                <div class="font-medium font-mono text-red-600" x-text="formatPercent(result?.metrics?.worst_month)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Number of Trades</div>
+                                <div class="font-medium font-mono" x-text="result?.metrics?.num_trades"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trading Costs -->
+                <div x-show="result?.trading_costs" x-cloak class="card">
+                    <div class="px-6 py-4 border-b">
+                        <h3 class="text-lg font-semibold text-gray-900">Trading Costs</h3>
+                    </div>
+                    <div class="p-6">
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                            <div>
+                                <div class="text-sm text-gray-500">Total Costs</div>
+                                <div class="font-medium font-mono" x-text="formatCurrency(result?.trading_costs?.total_costs)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Costs per Year</div>
+                                <div class="font-medium font-mono" x-text="formatCurrency(result?.trading_costs?.costs_per_year)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Costs % of Final</div>
+                                <div class="font-medium font-mono" x-text="formatNumber(result?.trading_costs?.costs_pct_of_final) + '%'"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Number of Trades</div>
+                                <div class="font-medium" x-text="result?.trading_costs?.num_trades"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Annual Turnover</div>
+                                <div class="font-medium" x-text="Math.round(result?.trading_costs?.turnover_annual || 0) + '%'"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Constraint Impact -->
+                <div x-show="result?.constraint_impact" x-cloak class="card">
+                    <div class="px-6 py-4 border-b">
+                        <h3 class="text-lg font-semibold text-gray-900">Constraint Impact</h3>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <div class="text-sm text-gray-500">Execution Lag</div>
+                                <div class="font-medium" x-text="(result?.constraint_impact?.execution_lag_days || 0) + 'd'"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Rebalance Signals</div>
+                                <div class="font-medium" x-text="Math.round(result?.constraint_impact?.rebalance_signals || 0)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Requested Trades</div>
+                                <div class="font-medium" x-text="Math.round(result?.constraint_impact?.liquidity?.requested_trades || 0)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Executed Trades</div>
+                                <div class="font-medium" x-text="Math.round(result?.constraint_impact?.liquidity?.executed_trades || 0)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Skipped Trades</div>
+                                <div class="font-medium text-red-600" x-text="Math.round(result?.constraint_impact?.liquidity?.skipped_trades || 0)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Clipped Trades</div>
+                                <div class="font-medium text-amber-600" x-text="Math.round(result?.constraint_impact?.liquidity?.clipped_by_max_participation || 0)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Req→Exec Ratio</div>
+                                <div class="font-medium font-mono" x-text="formatPercent(result?.constraint_impact?.liquidity?.requested_to_executed_ratio)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Skipped Ratio</div>
+                                <div class="font-medium font-mono text-red-600" x-text="formatPercent(result?.constraint_impact?.liquidity?.skipped_trade_ratio)"></div>
+                            </div>
+                        </div>
+
+                        <div x-show="result?.constraint_impact?.risk_overlay && Object.keys(result?.constraint_impact?.risk_overlay || {}).length > 0"
+                             class="pt-4 border-t">
+                            <p class="text-sm font-medium text-gray-700 mb-3">Risk Overlay Diagnostics</p>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div>
+                                    <div class="text-sm text-gray-500">Apply Calls</div>
+                                    <div class="font-medium" x-text="Math.round(result?.constraint_impact?.risk_overlay?.apply_calls || 0)"></div>
+                                </div>
+                                <div>
+                                    <div class="text-sm text-gray-500">Changed Calls</div>
+                                    <div class="font-medium" x-text="Math.round(result?.constraint_impact?.risk_overlay?.changed_calls || 0)"></div>
+                                </div>
+                                <div>
+                                    <div class="text-sm text-gray-500">Turnover Bindings</div>
+                                    <div class="font-medium" x-text="Math.round(result?.constraint_impact?.risk_overlay?.turnover_budget_bindings || 0)"></div>
+                                </div>
+                                <div>
+                                    <div class="text-sm text-gray-500">DD Brake Activations</div>
+                                    <div class="font-medium" x-text="Math.round(result?.constraint_impact?.risk_overlay?.drawdown_brake_activations || 0)"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tax Impact (if enabled) -->
+                <div x-show="result?.tax_enabled && result?.tax_summary" x-cloak class="card">
+                    <div class="px-6 py-4 border-b">
+                        <h3 class="text-lg font-semibold text-gray-900">Tax Impact</h3>
+                    </div>
+                    <div class="p-6">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <div class="text-sm text-gray-500">Total Tax Paid</div>
+                                <div class="font-medium font-mono" x-text="formatCurrency(result?.tax_summary?.total_tax_paid)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Effective Tax Rate</div>
+                                <div class="font-medium font-mono" x-text="formatPercent(result?.tax_summary?.effective_tax_rate)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Tax Drag (CAGR)</div>
+                                <div class="font-medium text-red-600" x-text="(result?.tax_summary?.tax_drag_cagr_pp || 0).toFixed(2) + ' pp'"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Tax Drag (Final)</div>
+                                <div class="font-medium text-red-600" x-text="formatNumber(result?.tax_summary?.tax_drag_final_pct) + '%'"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Realized Gains</div>
+                                <div class="font-medium text-green-600" x-text="formatCurrency(result?.tax_summary?.total_realized_gains)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Realized Losses</div>
+                                <div class="font-medium text-red-600" x-text="formatCurrency(result?.tax_summary?.total_realized_losses)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Net Realized Gain</div>
+                                <div class="font-medium font-mono" x-text="formatCurrency(result?.tax_summary?.net_realized_gain)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Exemption Used</div>
+                                <div class="font-medium font-mono" x-text="formatCurrency(result?.tax_summary?.exemption_used)"></div>
+                            </div>
+                        </div>
+                        <!-- Liquidation info -->
+                        <div x-show="result?.tax_summary?.unrealized_gain_at_end || result?.tax_summary?.tax_paid_liquidation" class="mt-4 pt-4 border-t grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <div class="text-sm text-gray-500">Unrealized Gain</div>
+                                <div class="font-medium"
+                                     :class="(result?.tax_summary?.unrealized_gain_at_end || 0) >= 0 ? 'text-green-600' : 'text-red-600'"
+                                     x-text="formatCurrency(result?.tax_summary?.unrealized_gain_at_end)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Liquidation Tax</div>
+                                <div class="font-medium text-red-600" x-text="formatCurrency(result?.tax_summary?.tax_paid_liquidation)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Total Tax (incl. Liq.)</div>
+                                <div class="font-medium font-mono" x-text="formatCurrency((result?.tax_summary?.total_tax_paid || 0) + (result?.tax_summary?.tax_paid_liquidation || 0))"></div>
+                            </div>
+                        </div>
+                        <!-- Final values -->
+                        <div class="mt-4 pt-4 border-t grid grid-cols-3 gap-4">
+                            <div>
+                                <div class="text-sm text-gray-500">Final Value (Gross)</div>
+                                <div class="font-medium font-mono" x-text="formatCurrency(result?.tax_summary?.final_value_gross)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Final Value (Net Realized)</div>
+                                <div class="font-medium font-mono" x-text="formatCurrency(result?.tax_summary?.final_value_net_realized)"></div>
+                            </div>
+                            <div>
+                                <div class="text-sm text-gray-500">Final Value (Liquidation)</div>
+                                <div class="font-medium font-mono" x-text="formatCurrency(result?.tax_summary?.final_value_net_liquidation)"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Returns Heatmap -->
+                <div x-show="result?.monthly_returns && result?.monthly_returns.length > 0" x-cloak class="card">
+                    <div class="px-6 py-4 border-b">
+                        <h3 class="text-lg font-semibold text-gray-900">Monthly Returns</h3>
+                    </div>
+                    <div class="p-4 overflow-x-auto">
+                        <div id="monthly-heatmap" style="height: 300px;"></div>
+                    </div>
+                </div>
+
+                <!-- Trades Table (collapsed) -->
+                <div x-show="result?.trades && result?.trades.length > 0" x-cloak x-data="{ tradesOpen: false }" class="card">
+                    <div class="px-6 py-4 border-b flex justify-between items-center cursor-pointer"
+                         @click="tradesOpen = !tradesOpen">
+                        <h3 class="text-lg font-semibold text-gray-900">Recent Trades (<span x-text="result?.trades?.length || 0"></span>)</h3>
+                        <svg class="w-5 h-5 text-gray-500 transform transition-transform"
+                             :class="{ 'rotate-180': tradesOpen }"
+                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                    <div x-show="tradesOpen" x-collapse class="overflow-x-auto">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="text-left py-2 px-3 text-gray-500 font-medium">Date</th>
+                                    <th class="text-left py-2 px-3 text-gray-500 font-medium">Ticker</th>
+                                    <th class="text-left py-2 px-3 text-gray-500 font-medium">Action</th>
+                                    <th class="text-right py-2 px-3 text-gray-500 font-medium">Shares</th>
+                                    <th class="text-right py-2 px-3 text-gray-500 font-medium">Price</th>
+                                    <th class="text-right py-2 px-3 text-gray-500 font-medium">Value</th>
+                                    <th class="text-right py-2 px-3 text-gray-500 font-medium">Costs</th>
+                                    <th x-show="result?.tax_enabled" class="text-right py-2 px-3 text-gray-500 font-medium">Tax</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="trade in result?.trades || []" :key="trade.date + trade.ticker">
+                                    <tr class="border-b hover:bg-gray-50">
+                                        <td class="py-2 px-3 text-gray-700" x-text="trade.date"></td>
+                                        <td class="py-2 px-3 font-medium" x-text="trade.ticker"></td>
+                                        <td class="py-2 px-3">
+                                            <span class="badge"
+                                                  :class="trade.action === 'BUY' ? 'badge--buy' : 'badge--sell'"
+                                                  x-text="trade.action"></span>
+                                        </td>
+                                        <td class="text-right py-2 px-3 font-mono" x-text="trade.shares.toFixed(2)"></td>
+                                        <td class="text-right py-2 px-3 font-mono" x-text="formatCurrency(trade.price)"></td>
+                                        <td class="text-right py-2 px-3 font-mono" x-text="formatCurrency(trade.value)"></td>
+                                        <td class="text-right py-2 px-3 font-mono text-gray-500" x-text="formatCurrency(trade.costs)"></td>
+                                        <td x-show="result?.tax_enabled" class="text-right py-2 px-3 font-mono text-gray-500" x-text="trade.action === 'SELL' ? formatCurrency(trade.tax_paid || 0) : '-'"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Metric Definitions (collapsed) -->
+                <div x-data="{ defsOpen: false }" class="card">
+                    <div class="px-6 py-4 border-b cursor-pointer"
+                         @click="defsOpen = !defsOpen">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-lg font-semibold text-gray-900">Metric Definitions</h3>
+                            <svg class="w-5 h-5 text-gray-500 transform transition-transform"
+                                 :class="{ 'rotate-180': defsOpen }"
+                                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div x-show="defsOpen" x-collapse class="p-6">
+                        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <dt class="font-medium text-gray-700">CAGR (Compound Annual Growth Rate)</dt>
+                                <dd class="text-gray-500">Annualized return over the entire period, accounting for compounding.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Sharpe Ratio</dt>
+                                <dd class="text-gray-500">Risk-adjusted return measuring excess return per unit of volatility. Higher is better.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Sortino Ratio</dt>
+                                <dd class="text-gray-500">Similar to Sharpe but only considers downside volatility. Higher is better.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Max Drawdown</dt>
+                                <dd class="text-gray-500">Largest peak-to-trough decline during the backtest period.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Calmar Ratio</dt>
+                                <dd class="text-gray-500">CAGR divided by maximum drawdown. Measures return per unit of drawdown risk.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Volatility</dt>
+                                <dd class="text-gray-500">Annualized standard deviation of returns.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Win Rate (Monthly)</dt>
+                                <dd class="text-gray-500">Percentage of months with positive returns.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Annual Turnover</dt>
+                                <dd class="text-gray-500">Percentage of portfolio traded per year (100% = entire portfolio replaced once).</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Tax Drag (CAGR)</dt>
+                                <dd class="text-gray-500">Percentage points of CAGR lost to taxes annually.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Tax Drag (Final)</dt>
+                                <dd class="text-gray-500">Percentage of final value lost to taxes over entire period.</dd>
+                            </div>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div x-show="!result && !loading && !error" class="card loading-placeholder">
+                <svg class="h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+                <div class="w-full space-y-2">
+                    <div class="skeleton skeleton--wide" style="height:0.5rem"></div>
+                    <div class="skeleton skeleton--med" style="height:0.5rem"></div>
+                    <div class="skeleton skeleton--short" style="height:0.5rem"></div>
+                </div>
+                <p class="text-sm text-gray-400">Select a strategy and click "Run Backtest"</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function backtest() {
+    return {
+        form: {
+            strategy: '{{ selected_strategy or "" }}',
+            start_date: '2010-01-01',
+            end_date: '',
+            initial_capital: 10000,
+            rebalance_frequency: 'monthly',
+            benchmark: 'S&P 500',
+            costs_pct: 0.001,
+            tax_enabled: true,
+            tax_exemption: 1000,
+            metric_basis: 'net_liquidation',
+            drip_enabled: false,
+            skip_failed: true,
+            preset_profile: '',
+            execution_lag_days: 0,
+            max_volume_participation: null,
+            min_daily_dollar_volume: 0,
+            liquidity_on_missing_volume: 'allow',
+            max_position: null,
+            turnover_budget: null,
+            sector_caps_text: '',
+            ticker_sectors_text: '',
+            drawdown_brake_threshold: null,
+            drawdown_brake_cash_target: 1.0,
+            drawdown_brake_release: null,
+            params: {}
+        },
+        strategySchema: {% if strategy_schema %}{{ strategy_schema | tojson }}{% else %}null{% endif %},
+        loading: false,
+        error: null,
+        result: null,
+        elapsedSeconds: 0,
+        progressData: null,
+        progressInterval: null,
+        currentRunId: null,
+        cancelRequested: false,
+        elapsedTimer: null,
+
+        async loadStrategySchema() {
+            if (!this.form.strategy) {
+                this.strategySchema = null;
+                return;
+            }
+
+            try {
+                const fileName = this.form.strategy.split('/').pop();
+                const response = await fetch(`/api/v1/strategies/${fileName}/schema`);
+                if (response.ok) {
+                    this.strategySchema = await response.json();
+                    // Initialize params with defaults
+                    this.form.params = {};
+                    for (const param of this.strategySchema.parameters || []) {
+                        if (param.default !== null && param.default !== undefined) {
+                            this.form.params[param.name] = param.default;
+                        }
+                    }
+                    // Update rebalance frequency from strategy
+                    if (this.strategySchema.rebalance_frequency) {
+                        this.form.rebalance_frequency = this.strategySchema.rebalance_frequency;
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load strategy schema:', e);
+            }
+        },
+
+        async runBacktest() {
+            this.loading = true;
+            this.error = null;
+            this.result = null;
+            this.startTimer();
+            this.cancelRequested = false;
+            const runId = (crypto?.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random()}`;
+            this.currentRunId = runId;
+            this.startProgressPolling(runId);
+
+            try {
+                const sectorCaps = parseKeyValueMap(this.form.sector_caps_text, true);
+                const tickerSectors = parseKeyValueMap(this.form.ticker_sectors_text, false);
+                const payload = {
+                    ...this.form,
+                    run_id: runId,
+                    sector_caps: sectorCaps,
+                    ticker_sectors: tickerSectors,
+                };
+                delete payload.sector_caps_text;
+                delete payload.ticker_sectors_text;
+
+                const response = await fetch('/api/v1/run', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) {
+                    let errorMsg = 'Backtest failed';
+                    try {
+                        const err = await response.json();
+                        if (typeof err.detail === 'string') {
+                            errorMsg = err.detail;
+                        } else if (err.detail && typeof err.detail === 'object') {
+                            errorMsg = JSON.stringify(err.detail);
+                        } else if (err.message) {
+                            errorMsg = err.message;
+                        }
+                    } catch (parseErr) {
+                        try {
+                            errorMsg = await response.text();
+                            if (errorMsg.length > 200) {
+                                errorMsg = errorMsg.substring(0, 200) + '...';
+                            }
+                        } catch {
+                            errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                        }
+                    }
+                    throw new Error(errorMsg);
+                }
+
+                this.result = await response.json();
+                this.$nextTick(() => this.renderChart());
+            } catch (e) {
+                if (this.cancelRequested) {
+                    this.error = 'Backtest cancelled.';
+                } else {
+                    this.error = e.message;
+                }
+            } finally {
+                this.stopTimer();
+                this.stopProgressPolling();
+                this.loading = false;
+            }
+        },
+
+        get progressSummary() {
+            if (!this.progressData) return 'Initializing backtest...';
+            if (this.progressData.status === 'pending') return 'Waiting for backtest to start...';
+            if (this.progressData.status === 'cancelling') return 'Cancelling backtest...';
+            if (this.progressData.status === 'cancelled') return 'Backtest cancelled';
+            return this.progressData.message || 'Running backtest...';
+        },
+
+        startProgressPolling(runId) {
+            this.progressData = null;
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+            }
+            const poll = async () => {
+                try {
+                    const response = await fetch(`/api/v1/run/progress/${runId}`);
+                    if (!response.ok) {
+                        return;
+                    }
+                    this.progressData = await response.json();
+                } catch {
+                    // Ignore polling errors while backtest is running
+                }
+            };
+            poll();
+            this.progressInterval = setInterval(poll, 1000);
+        },
+
+        stopProgressPolling() {
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+                this.progressInterval = null;
+            }
+        },
+
+        async cancelRun() {
+            if (!this.currentRunId) return;
+            this.cancelRequested = true;
+            try {
+                await fetch(`/api/v1/run/cancel/${this.currentRunId}`, { method: 'POST' });
+            } catch {
+                // Ignore cancellation errors
+            }
+        },
+
+        startTimer() {
+            this.elapsedSeconds = 0;
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+            }
+            this.elapsedTimer = setInterval(() => {
+                this.elapsedSeconds += 1;
+            }, 1000);
+        },
+
+        stopTimer() {
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+            this.elapsedTimer = null;
+            }
+        },
+
+        applyPresetProfile() {
+            const presets = {
+                research: {
+                    execution_lag_days: 0,
+                    max_volume_participation: null,
+                    min_daily_dollar_volume: 0,
+                    liquidity_on_missing_volume: 'allow',
+                    max_position: null,
+                    turnover_budget: null,
+                    drawdown_brake_threshold: null,
+                    drawdown_brake_cash_target: 1.0,
+                    drawdown_brake_release: null,
+                },
+                realistic: {
+                    execution_lag_days: 1,
+                    max_volume_participation: 0.10,
+                    min_daily_dollar_volume: 250000,
+                    liquidity_on_missing_volume: 'skip',
+                    max_position: 0.35,
+                    turnover_budget: 0.35,
+                    drawdown_brake_threshold: null,
+                    drawdown_brake_cash_target: 1.0,
+                    drawdown_brake_release: null,
+                },
+                defensive: {
+                    execution_lag_days: 1,
+                    max_volume_participation: 0.05,
+                    min_daily_dollar_volume: 1000000,
+                    liquidity_on_missing_volume: 'skip',
+                    max_position: 0.25,
+                    turnover_budget: 0.20,
+                    drawdown_brake_threshold: 0.15,
+                    drawdown_brake_cash_target: 0.70,
+                    drawdown_brake_release: 0.08,
+                },
+            };
+            const preset = presets[this.form.preset_profile];
+            if (!preset) {
+                return;
+            }
+            Object.assign(this.form, preset);
+        },
+
+        renderChart() {
+            if (!this.result?.equity_curve) return;
+
+            // Equity Chart
+            const traces = [{
+                x: this.result.equity_curve.dates,
+                y: this.result.equity_curve.values,
+                type: 'scatter',
+                mode: 'lines',
+                name: this.result.strategy_name,
+                line: { color: '#2563eb' }
+            }];
+
+            if (this.result.benchmark_curve) {
+                traces.push({
+                    x: this.result.benchmark_curve.dates,
+                    y: this.result.benchmark_curve.values,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Benchmark',
+                    line: { color: '#9ca3af', dash: 'dash' }
+                });
+            }
+
+            const layout = getPlotlyLayout({
+                yaxis: { title: 'Portfolio Value (EUR)' },
+                legend: { orientation: 'h', y: -0.15 }
+            });
+
+            Plotly.newPlot('equity-chart', traces, layout, { responsive: true });
+
+            // Monthly Returns Heatmap
+            this.renderMonthlyHeatmap();
+        },
+
+        renderMonthlyHeatmap() {
+            if (!this.result?.monthly_returns || this.result.monthly_returns.length === 0) return;
+
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+            // Group by year
+            const byYear = {};
+            this.result.monthly_returns.forEach(mr => {
+                if (!byYear[mr.year]) byYear[mr.year] = {};
+                byYear[mr.year][mr.month] = mr.return_pct;
+            });
+
+            const years = Object.keys(byYear).sort();
+            const z = [];
+            const text = [];
+
+            years.forEach(year => {
+                const row = [];
+                const textRow = [];
+                for (let m = 1; m <= 12; m++) {
+                    const val = byYear[year][m];
+                    row.push(val !== undefined ? val : null);
+                    textRow.push(val !== undefined ? val.toFixed(1) + '%' : '');
+                }
+                z.push(row);
+                text.push(textRow);
+            });
+
+            const heatmapData = [{
+                z: z,
+                x: months,
+                y: years,
+                type: 'heatmap',
+                colorscale: [
+                    [0, '#dc2626'],      // Red for negative
+                    [0.5, '#fafafa'],    // White for zero
+                    [1, '#16a34a']       // Green for positive
+                ],
+                zmid: 0,
+                text: text,
+                texttemplate: '%{text}',
+                textfont: { size: 10 },
+                hovertemplate: '%{y} %{x}: %{z:.2f}%<extra></extra>',
+                showscale: true,
+                colorbar: {
+                    title: 'Return %',
+                    ticksuffix: '%'
+                }
+            }];
+
+            const heatmapLayout = getPlotlyLayout({
+                margin: { t: 20, r: 80, b: 40, l: 60 },
+                yaxis: { title: '', autorange: 'reversed' }
+            });
+
+            Plotly.newPlot('monthly-heatmap', heatmapData, heatmapLayout, { responsive: true });
+        },
+
+        init() {
+            // Load schema if strategy is pre-selected
+            if (this.form.strategy && !this.strategySchema) {
+                this.loadStrategySchema();
+            }
+        }
+    }
+}
+</script>
+{% endblock %}

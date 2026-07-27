@@ -1,0 +1,53 @@
+{
+  "feature_columns": [
+    "ret_21d",
+    "ret_63d",
+    "ret_252d",
+    "vol_63d",
+    "maxdd_126d",
+    "trend_spread"
+  ],
+  "imputer_medians": {
+    "maxdd_126d": -0.12662889969582147,
+    "ret_21d": 0.009932097772264892,
+    "ret_252d": 0.09831149653546056,
+    "ret_63d": 0.03161925327592208,
+    "trend_spread": -0.02092790246367776,
+    "vol_63d": 0.20049070119299373
+  },
+  "tickers": [
+    "QQQ3.L",
+    "3LUS.L",
+    "3USL.L",
+    "SOXL",
+    "SXR8.DE",
+    "EQQQ.L",
+    "VUSA.L",
+    "CSPX.L",
+    "IUSA.L",
+    "VWRL.L",
+    "EUNL.DE",
+    "IS3N.DE",
+    "SAP.DE",
+    "SIE.DE",
+    "ALV.DE",
+    "BAS.DE",
+    "BMW.DE",
+    "BAYN.DE",
+    "DBK.DE",
+    "DTE.DE",
+    "MUV2.DE",
+    "HSBA.L",
+    "BP.L",
+    "SHEL.L",
+    "AZN.L",
+    "GSK.L",
+    "ULVR.L",
+    "RIO.L",
+    "GLEN.L",
+    "LLOY.L",
+    "BARC.L",
+    "TLT",
+    "GLD"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "available_from": "2018-07-02",
+  "bundle_hash": "1d4ebe73746758b6c5e6db77b7829de687d131b6f6eede912be1ca44166f4cfd",
+  "config_hash": "5d841402c908843406e3d0725b4e06581ef04efd1326a59ef31272ee5769e7f3",
+  "feature_schema_hash": "b7d5c286a200f408d509634428c378ac4d34e4355404b312f965c7e38ab3435f",
+  "feature_trained_through": "2017-07-07",
+  "framework": "lightgbm",
+  "horizons": [
+    21,
+    63,
+    252
+  ],
+  "imputer_state_path": "imputer_state.json",
+  "labels_known_through": "2018-06-29",
+  "lib_versions": {
+    "lightgbm": "4.6.0",
+    "numpy": "1.26.4",
+    "pandas": "2.0.0",
+    "python": "3.10.11"
+  },
+  "model_family": "lightgbm",
+  "notes": null,
+  "seed": 42,
+  "sequence_length": null,
+  "stage_paths": {
+    "stage1_21d": "stage1_21d.pkl",
+    "stage1_252d": "stage1_252d.pkl",
+    "stage1_63d": "stage1_63d.pkl",
+    "stage2_21d": "stage2_21d.pkl",
+    "stage2_252d": "stage2_252d.pkl",
+    "stage2_63d": "stage2_63d.pkl",
+    "stage3": "stage3.pkl"
+  },
+  "training_run_id": "bc671481-9b87-4339-abb6-c46b63ee1610",
+  "zscore_stats_path": "zscore_stats.json"
+}
