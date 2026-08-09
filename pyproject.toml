@@ -22,7 +22,7 @@ pdfplumber = "^0.10.0"
 beautifulsoup4 = "^4.12.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
+pytest = "^9.0.3"
 pytest-cov = "^4.1.0"
 
 [tool.poetry.group.web]
@@ -31,7 +31,7 @@ optional = true
 [tool.poetry.group.web.dependencies]
 fastapi = "^0.109.0"
 uvicorn = "^0.27.0"
-python-multipart = "^0.0.6"
+python-multipart = "^0.0.31"
 
 # Phase C: lightweight sentiment engine. NLTK ships the VADER lexicon
 # but the lexicon itself must be downloaded once via
@@ -48,7 +48,7 @@ nltk = "^3.8"
 optional = true
 
 [tool.poetry.group.sentiment-finbert.dependencies]
-transformers = "^4.40"
+transformers = "^5.5"
 torch = "^2.2"
 
 # Phase D: ML-Forecast pipeline (LightGBM, xgboost, sklearn). Core code
