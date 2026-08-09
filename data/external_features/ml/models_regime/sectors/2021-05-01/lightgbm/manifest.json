@@ -1,0 +1,39 @@
+{
+  "available_from": "2021-05-01",
+  "bundle_hash": "701a43f3d4a41808231b10e2e5f0382d2a940805fd0ad27759b4d50295667233",
+  "class_names": {
+    "0": "normal",
+    "1": "fragile",
+    "2": "stressed"
+  },
+  "classes": [
+    0,
+    1,
+    2
+  ],
+  "feature_columns": [
+    "ret_21d",
+    "ret_63d",
+    "ret_252d",
+    "vol_63d",
+    "maxdd_126d",
+    "trend_spread"
+  ],
+  "feature_trained_through": "2021-03-31",
+  "framework": "lightgbm_classifier",
+  "label_distribution": {
+    "fragile": 0.0689216573966283,
+    "normal": 0.827491053335058,
+    "stressed": 0.10358728926831372
+  },
+  "label_horizon_days": 21,
+  "labels_known_through": "2021-04-30",
+  "lib_versions": {
+    "lightgbm": "4.6.0",
+    "numpy": "1.26.4",
+    "pandas": "2.3.3"
+  },
+  "n_training_rows": 46386,
+  "notes": null,
+  "seed": 42
+}

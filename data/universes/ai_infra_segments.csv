@@ -1,0 +1,88 @@
+ticker,segment,cap_group,status,gics_hint
+# AI-infrastructure value-chain classification (STATIC map = the "thesis").
+# Methodik-Doku: docs/ai_infra_basket_2026-06-01.md
+# cap_group=semi  -> Halbleiter-Komplex, der mit dem bestehenden 3x-Semi-Core
+#                    (SOXX/SMH-Overlap) ueberlappt -> bewusst gekappt.
+# cap_group=diversifier -> differenzierendes Non-Semi-Exposure (Strom, Kuehlung,
+#                    Netzwerk/Optik, Cloud, Software, REIT) -> Kern des Mehrwerts.
+# status delisted_*: bewusst aufgenommen fuer Survivorship-Kontrolle (waren
+#                    historisch US-gelistet + Index-Mitglied + im Segment).
+# HINWEIS: Klassifikation ist current-GICS-Vintage (einzige Look-ahead-Annahme,
+#          siehe Methodik-Doku). Auslaendische Report-Namen (TSM/ASML/ASM.AS/
+#          BESI.AS/900001.KS/900002.KS/ENR.DE/ARM) fehlen in NDX/SP500 -> in
+#          U-A nicht abgedeckt (Coverage-Gap, dokumentiert).
+NVDA,compute,semi,active,gpu_accelerator
+AMD,compute,semi,active,cpu_gpu
+INTC,compute,semi,active,cpu_foundry
+QCOM,compute,semi,active,mobile_soc
+AVGO,compute,semi,active,broadcom_networking_silicon
+MRVL,compute,semi,active,data_infra_silicon
+XLNX,compute,semi,delisted_acq_amd_2022,fpga
+ALTR,compute,semi,delisted_acq_intel_2015,fpga
+AMCC,compute,semi,delisted_acq_2017,arm_server
+CAVM,compute,semi,delisted_acq_marvell_2018,arm_server
+MU,memory,semi,active,dram_hbm_nand
+GFS,foundry,semi,active,foundry
+TSM,foundry,semi,active,foundry_adr_foreign
+AMAT,semi_equipment,semi,active,deposition
+LRCX,semi_equipment,semi,active,etch
+KLAC,semi_equipment,semi,active,process_control
+TER,semi_equipment,semi,active,test
+MKSI,semi_equipment,semi,active,subsystems
+ENTG,semi_equipment,semi,active,materials
+ACLS,semi_equipment,semi,active,ion_implant
+COHU,semi_equipment,semi,active,test_handler
+ONTO,semi_equipment,semi,active,metrology
+UCTT,semi_equipment,semi,active,subsystems
+AEIS,semi_equipment,semi,active,power_subsystems
+FORM,semi_equipment,semi,active,probe_cards
+CCMP,semi_equipment,semi,delisted_acq_2022,cmp_slurry
+AMKR,packaging,semi,active,osat
+KLIC,packaging,semi,active,bonding
+WDC,storage,diversifier,active,nand_hdd
+STX,storage,diversifier,active,hdd
+NTAP,storage,diversifier,active,enterprise_storage
+PSTG,storage,diversifier,active,flash_array
+SNDK,storage,diversifier,delisted_acq_wdc_2016,nand
+EMC,storage,diversifier,delisted_acq_dell_2016,enterprise_storage
+ANET,network,diversifier,active,ai_ethernet_switching
+CSCO,network,diversifier,active,networking
+JNPR,network,diversifier,active,networking
+FFIV,network,diversifier,active,app_delivery
+EXTR,network,diversifier,active,networking
+MLNX,network,diversifier,delisted_acq_nvidia_2020,infiniband
+LITE,optics,diversifier,active,optical_components
+COHR,optics,diversifier,active,lasers_optics
+FN,optics,diversifier,active,optical_manufacturing
+CIEN,optics,diversifier,active,optical_systems
+INFN,optics,diversifier,active,optical_systems
+VIAV,optics,diversifier,active,optical_test
+AAOI,optics,diversifier,active,optical_transceivers
+INPHI,optics,diversifier,delisted_acq_marvell_2021,optical_dsp
+ACIA,optics,diversifier,delisted_acq_cisco_2021,coherent_optics
+FNSR,optics,diversifier,delisted_acq_iivi_2019,optical_components
+OCLR,optics,diversifier,delisted_acq_lumentum_2018,optical_components
+NPTN,optics,diversifier,delisted_acq_2022,optical_components
+ETN,power,diversifier,active,electrical_power
+EMR,power,diversifier,active,automation_power
+ROK,power,diversifier,active,industrial_automation
+HUBB,power,diversifier,active,electrical_grid
+GNRC,power,diversifier,active,backup_power
+PWR,power,diversifier,active,electrical_construction
+AYI,power,diversifier,active,lighting_controls
+NVT,power,diversifier,active,electrical_connection
+POWL,power,diversifier,active,electrical_distribution
+GEV,power,diversifier,active,grid_generation_2024ipo
+VRT,cooling,diversifier,active,power_and_cooling
+MSFT,cloud,diversifier,active,azure
+ORCL,cloud,diversifier,active,oci
+AMZN,cloud,diversifier,active,aws
+GOOGL,cloud,diversifier,active,gcp
+CRM,software,diversifier,active,agentforce_data
+NOW,software,diversifier,active,workflow_ai
+EQIX,reit,diversifier,active,datacenter_reit
+DLR,reit,diversifier,active,datacenter_reit
+CONE,reit,diversifier,delisted_acq_2022,datacenter_reit
+COR,reit,diversifier,delisted_acq_2021,datacenter_reit
+QTS,reit,diversifier,delisted_acq_2021,datacenter_reit
+DFT,reit,diversifier,delisted_acq_dlr_2017,datacenter_reit
