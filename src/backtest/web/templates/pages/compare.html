@@ -1,0 +1,871 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="compare()" class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-gray-900">Compare Strategies</h1>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Form -->
+        <div class="lg:col-span-1">
+            <form @submit.prevent="runComparison" novalidate class="card">
+                <div class="px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Configuration</h2>
+                </div>
+
+                <div class="p-6 space-y-4">
+                    <!-- Strategy Selection (Multi-Select) -->
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="block text-sm font-medium text-gray-700">Strategies to Compare</label>
+                            <button type="button"
+                                    @click="toggleSelectAll()"
+                                    class="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                                <span x-text="form.selected_strategies.length === allStrategies.length ? 'Deselect All' : 'Select All'"></span>
+                            </button>
+                        </div>
+                        <div class="space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                            {% for strategy in strategies %}
+                            <label class="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                <input type="checkbox"
+                                       value="{{ strategy.file_path }}"
+                                       x-model="form.selected_strategies"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm text-gray-700">{{ strategy.name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1" x-text="form.selected_strategies.length + ' of ' + allStrategies.length + ' selected'"></p>
+                    </div>
+
+                    <!-- Date Range -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                            <input type="date"
+                                   x-model="form.start_date"
+                                   class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                            <input type="date"
+                                   x-model="form.end_date"
+                                   class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+
+                    <!-- Capital -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Initial Capital (EUR)</label>
+                        <input type="number"
+                               x-model.number="form.initial_capital"
+                               min="100"
+                               step="100"
+                               class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <!-- Benchmark -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Benchmark</label>
+                        <select
+                            x-model="form.benchmark"
+                            class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="S&P 500">S&P 500</option>
+                            <option value="MSCI World">MSCI World</option>
+                            <option value="MSCI ACWI">MSCI ACWI</option>
+                            <option value="DAX">DAX</option>
+                        </select>
+                    </div>
+
+                    <!-- Metric Basis -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Metric Basis</label>
+                        <select
+                            x-model="form.metric_basis"
+                            class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="net_liquidation">Net (Liquidation)</option>
+                            <option value="net_realized">Net (Realized)</option>
+                            <option value="gross">Gross</option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Net Liquidation = fair comparison with tax on unrealized gains</p>
+                    </div>
+
+                    <!-- Advanced Options (collapsed) -->
+                    <div class="border-t pt-4 mt-4">
+                        <button type="button"
+                                @click="showAdvanced = !showAdvanced"
+                                class="flex items-center text-sm font-medium text-gray-700">
+                            <svg class="w-4 h-4 mr-1 transition-transform" :class="{ 'rotate-90': showAdvanced }" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                            </svg>
+                            Advanced Options
+                        </button>
+
+                        <div x-show="showAdvanced" x-cloak class="mt-3 space-y-3">
+                            <!-- Tax Settings -->
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox"
+                                       x-model="form.tax_enabled"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm text-gray-700">German Tax Model</span>
+                            </label>
+
+                            <div x-show="form.tax_enabled">
+                                <label class="block text-sm text-gray-600 mb-1">Tax Exemption (EUR)</label>
+                                <input type="number"
+                                       x-model.number="form.tax_exemption"
+                                       min="0"
+                                       step="100"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+
+                            <!-- Transaction Costs -->
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Transaction Costs (%)</label>
+                                <input type="number"
+                                       x-model.number="form.costs_pct"
+                                       min="0"
+                                       max="1"
+                                       step="0.01"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Execution Lag (days)</label>
+                                    <input type="number"
+                                           x-model.number="form.execution_lag_days"
+                                           min="0"
+                                           step="1"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Max Volume Participation</label>
+                                    <input type="number"
+                                           x-model.number="form.max_volume_participation"
+                                           min="0"
+                                           max="1"
+                                           step="0.01"
+                                           placeholder="0.10 = 10%"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Min Daily $ Volume</label>
+                                    <input type="number"
+                                           x-model.number="form.min_daily_dollar_volume"
+                                           min="0"
+                                           step="1000"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Missing Volume</label>
+                                    <select
+                                        x-model="form.liquidity_on_missing_volume"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="allow">Allow Trade</option>
+                                        <option value="skip">Skip Trade</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="border-t pt-3">
+                                <p class="text-xs font-medium text-gray-700 mb-2">Risk Overlays</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Max Position</label>
+                                        <input type="number"
+                                               x-model.number="form.max_position"
+                                               min="0"
+                                               max="1"
+                                               step="0.01"
+                                               placeholder="0.25"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Turnover Budget</label>
+                                        <input type="number"
+                                               x-model.number="form.turnover_budget"
+                                               min="0"
+                                               max="1"
+                                               step="0.01"
+                                               placeholder="0.20"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <label class="block text-sm text-gray-600 mb-1">Sector Caps</label>
+                                    <input type="text"
+                                           x-model="form.sector_caps_text"
+                                           placeholder="equity=0.6, bonds=0.4"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div class="mt-3">
+                                    <label class="block text-sm text-gray-600 mb-1">Ticker Sectors</label>
+                                    <textarea
+                                        x-model="form.ticker_sectors_text"
+                                        rows="2"
+                                        placeholder="SPY=equity, BND=bonds"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                                </div>
+                                <div class="grid grid-cols-3 gap-3 mt-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Brake Threshold</label>
+                                        <input type="number"
+                                               x-model.number="form.drawdown_brake_threshold"
+                                               min="0"
+                                               max="1"
+                                               step="0.01"
+                                               placeholder="0.15"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Brake Cash</label>
+                                        <input type="number"
+                                               x-model.number="form.drawdown_brake_cash_target"
+                                               min="0"
+                                               max="1"
+                                               step="0.01"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Release</label>
+                                        <input type="number"
+                                               x-model.number="form.drawdown_brake_release"
+                                               min="0"
+                                               max="1"
+                                               step="0.01"
+                                               placeholder="0.08"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- DRIP -->
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox"
+                                       x-model="form.drip_enabled"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm text-gray-700">Dividend Reinvestment (DRIP)</span>
+                            </label>
+
+                            <!-- Skip Failed -->
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox"
+                                       x-model="form.skip_failed"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm text-gray-700">Skip Failed Downloads</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit"
+                            :disabled="loading || form.selected_strategies.length < 1"
+                            class="w-full bg-blue-600 text-white py-2 px-4 rounded-md font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center">
+                        <template x-if="loading">
+                            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </template>
+                        <span x-text="loading ? 'Running...' : 'Run Comparison'"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Results Area -->
+        <div class="lg:col-span-3 space-y-6">
+            <!-- Error Alert -->
+            <div x-show="error" x-cloak class="alert--error">
+                <div class="flex justify-between items-start">
+                    <div class="flex">
+                        <svg class="h-5 w-5 text-red-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                        </svg>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-red-800">Error</h3>
+                            <p class="mt-1 text-sm text-red-700" x-text="error"></p>
+                        </div>
+                    </div>
+                    <button @click="error = null" class="text-red-400 hover:text-red-600">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Indicator -->
+            <div x-show="loading" x-cloak class="card p-6">
+                <div class="flex items-center space-x-4">
+                    <svg class="animate-spin h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Running Comparison</h3>
+                        <p class="text-sm text-gray-600" x-text="progressSummary"></p>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Elapsed: <span x-text="formatDuration(elapsedSeconds)"></span>
+                        </p>
+                        <button type="button"
+                                class="mt-3 text-xs text-red-600 hover:text-red-800 font-medium"
+                                x-show="!cancelRequested"
+                                @click="cancelCompare">
+                            Cancel Comparison
+                        </button>
+                        <p class="text-xs text-gray-500 mt-2" x-show="cancelRequested">Cancellation requested...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <template x-if="result">
+                <div class="space-y-6">
+                    <!-- Summary -->
+                    <div class="card p-4">
+                        <div class="flex justify-between items-center">
+                            <h2 class="text-lg font-semibold text-gray-900">Comparison Results</h2>
+                            <span class="text-sm text-gray-500" x-text="result.start_date + ' to ' + result.end_date + ' (' + result.years.toFixed(1) + ' years)'"></span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">
+                            Metric basis: <span class="font-medium" x-text="result.metric_basis.replace('_', ' ')"></span>
+                            <template x-if="result.benchmark_name">
+                                <span> | Benchmark: <span class="font-medium" x-text="result.benchmark_name"></span></span>
+                            </template>
+                        </p>
+                    </div>
+
+                    <!-- Combined Equity Chart -->
+                    <div class="card p-4">
+                        <h3 class="text-md font-semibold text-gray-900 mb-4">Equity Curves (Normalized to 100)</h3>
+                        <div id="equity-chart" class="h-96"></div>
+                    </div>
+
+                    <!-- Comparison Table -->
+                    <div class="card overflow-hidden">
+                        <div class="px-4 py-3 border-b flex justify-between items-center">
+                            <h3 class="text-md font-semibold text-gray-900">Performance Comparison</h3>
+                            <span class="text-xs text-gray-500">Click column headers to sort</span>
+                        </div>
+                        <div class="overflow-x-auto scroll-shadow">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th @click="toggleSort('strategy_name')"
+                                            class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center gap-1">
+                                                Strategy
+                                                <template x-if="sortColumn === 'strategy_name'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                        <th @click="toggleSort('cagr_gross')"
+                                            class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center justify-end gap-1">
+                                                CAGR (Gross)
+                                                <template x-if="sortColumn === 'cagr_gross'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                        <th @click="toggleSort('cagr')"
+                                            class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center justify-end gap-1">
+                                                CAGR (Net)
+                                                <template x-if="sortColumn === 'cagr'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                        <th @click="toggleSort('excess_cagr')"
+                                            class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center justify-end gap-1">
+                                                Excess
+                                                <template x-if="sortColumn === 'excess_cagr'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                        <th @click="toggleSort('tax_drag_pp')"
+                                            class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center justify-end gap-1">
+                                                Tax Drag
+                                                <template x-if="sortColumn === 'tax_drag_pp'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                        <th @click="toggleSort('sharpe_ratio')"
+                                            class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center justify-end gap-1">
+                                                Sharpe
+                                                <template x-if="sortColumn === 'sharpe_ratio'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                        <th @click="toggleSort('sortino_ratio')"
+                                            class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center justify-end gap-1">
+                                                Sortino
+                                                <template x-if="sortColumn === 'sortino_ratio'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                        <th @click="toggleSort('max_drawdown')"
+                                            class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center justify-end gap-1">
+                                                Max DD
+                                                <template x-if="sortColumn === 'max_drawdown'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                        <th @click="toggleSort('calmar_ratio')"
+                                            class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center justify-end gap-1">
+                                                Calmar
+                                                <template x-if="sortColumn === 'calmar_ratio'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                        <th @click="toggleSort('num_trades')"
+                                            class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center justify-end gap-1">
+                                                Trades
+                                                <template x-if="sortColumn === 'num_trades'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                        <th @click="toggleSort('total_tax')" x-show="result.tax_enabled"
+                                            class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none">
+                                            <div class="flex items-center justify-end gap-1">
+                                                Tax Paid
+                                                <template x-if="sortColumn === 'total_tax'">
+                                                    <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                    </svg>
+                                                </template>
+                                            </div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <template x-for="(row, idx) in sortedRows" :key="row.strategy_name">
+                                        <tr :class="row.is_benchmark ? 'bg-gray-50' : 'hover:bg-gray-50'">
+                                            <td class="px-4 py-3 text-sm font-medium" :class="row.is_benchmark ? 'text-gray-500' : 'text-gray-900'" x-text="row.strategy_name"></td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-gray-600"
+                                                :class="isBestInColumn('cagr_gross', row) && 'bg-green-50'"
+                                                x-text="row.cagr_gross ? formatPercent(row.cagr_gross) : '-'"></td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono font-medium"
+                                                :class="[row.cagr >= 0 ? 'text-green-600' : 'text-red-600', isBestInColumn('cagr', row) && 'bg-green-50']"
+                                                x-text="formatPercent(row.cagr)"></td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono"
+                                                :class="[row.excess_cagr !== null ? (row.excess_cagr >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400', isBestInColumn('excess_cagr', row) && 'bg-green-50']"
+                                                x-text="row.excess_cagr !== null ? formatPercentSigned(row.excess_cagr) : '-'"></td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-orange-600"
+                                                :class="isBestInColumn('tax_drag_pp', row) && 'bg-green-50'"
+                                                x-text="row.tax_drag_pp !== null ? row.tax_drag_pp.toFixed(1) + 'pp' : '-'"></td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-gray-600"
+                                                :class="isBestInColumn('sharpe_ratio', row) && 'bg-green-50'"
+                                                x-text="row.is_benchmark ? '-' : formatNumber(row.sharpe_ratio)"></td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-gray-600"
+                                                :class="isBestInColumn('sortino_ratio', row) && 'bg-green-50'"
+                                                x-text="row.is_benchmark ? '-' : formatNumber(row.sortino_ratio)"></td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-red-600"
+                                                :class="isBestInColumn('max_drawdown', row) && 'bg-green-50'"
+                                                x-text="row.is_benchmark ? '-' : formatPercent(row.max_drawdown)"></td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-gray-600"
+                                                :class="isBestInColumn('calmar_ratio', row) && 'bg-green-50'"
+                                                x-text="row.is_benchmark ? '-' : formatNumber(row.calmar_ratio)"></td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-gray-600"
+                                                x-text="row.is_benchmark ? '-' : row.num_trades"></td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-gray-600" x-show="result.tax_enabled"
+                                                x-text="row.total_tax !== null ? formatCurrency(row.total_tax) : '-'"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Empty State -->
+            <template x-if="!result && !loading && !error">
+                <div class="card loading-placeholder">
+                    <svg class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    <div class="w-full space-y-2">
+                        <div class="skeleton skeleton--wide" style="height:0.5rem"></div>
+                        <div class="skeleton skeleton--med" style="height:0.5rem"></div>
+                        <div class="skeleton skeleton--short" style="height:0.5rem"></div>
+                    </div>
+                    <p class="text-sm text-gray-400">Select strategies and click "Run Comparison"</p>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function compare() {
+    return {
+        allStrategies: [
+            {% for strategy in strategies %}'{{ strategy.file_path }}'{% if not loop.last %}, {% endif %}{% endfor %}
+        ],
+        form: {
+            selected_strategies: [],
+            start_date: '2010-01-01',
+            end_date: '',
+            initial_capital: 10000,
+            benchmark: 'S&P 500',
+            metric_basis: 'net_liquidation',
+            tax_enabled: true,
+            tax_exemption: 1000,
+            costs_pct: 0.1,
+            drip_enabled: false,
+            skip_failed: true,
+            execution_lag_days: 0,
+            max_volume_participation: null,
+            min_daily_dollar_volume: 0,
+            liquidity_on_missing_volume: 'allow',
+            max_position: null,
+            turnover_budget: null,
+            sector_caps_text: '',
+            ticker_sectors_text: '',
+            drawdown_brake_threshold: null,
+            drawdown_brake_cash_target: 1.0,
+            drawdown_brake_release: null,
+        },
+        showAdvanced: false,
+        loading: false,
+        error: null,
+        result: null,
+        elapsedSeconds: 0,
+        progressData: null,
+        progressInterval: null,
+        currentRunId: null,
+        cancelRequested: false,
+        elapsedTimer: null,
+        sortColumn: null,
+        sortDirection: 'desc',
+
+        toggleSelectAll() {
+            if (this.form.selected_strategies.length === this.allStrategies.length) {
+                this.form.selected_strategies = [];
+            } else {
+                this.form.selected_strategies = [...this.allStrategies];
+            }
+        },
+
+        get sortedRows() {
+            if (!this.result?.rows) return [];
+            if (!this.sortColumn) return this.result.rows;
+
+            const rows = [...this.result.rows];
+            const col = this.sortColumn;
+            const dir = this.sortDirection === 'asc' ? 1 : -1;
+
+            return rows.sort((a, b) => {
+                // Benchmark always stays at end when sorting
+                if (a.is_benchmark && !b.is_benchmark) return 1;
+                if (!a.is_benchmark && b.is_benchmark) return -1;
+                if (a.is_benchmark && b.is_benchmark) return 0;
+
+                let aVal = a[col];
+                let bVal = b[col];
+
+                // Handle null/undefined values (sort to end)
+                if (aVal === null || aVal === undefined) return 1;
+                if (bVal === null || bVal === undefined) return -1;
+
+                // String comparison for strategy_name
+                if (col === 'strategy_name') {
+                    return dir * aVal.localeCompare(bVal);
+                }
+
+                // Numeric comparison for all others
+                return dir * (aVal - bVal);
+            });
+        },
+
+        isBestInColumn(col, row) {
+            if (!this.result?.rows || row.is_benchmark) return false;
+            const nonBenchmark = this.result.rows.filter(r => !r.is_benchmark);
+            if (nonBenchmark.length < 2) return false;
+            const val = row[col];
+            if (val === null || val === undefined) return false;
+            // For max_drawdown and tax_drag_pp, "best" means closest to zero (least negative / lowest)
+            const lowerIsBetter = col === 'max_drawdown' || col === 'tax_drag_pp';
+            const best = nonBenchmark.reduce((best, r) => {
+                const v = r[col];
+                if (v === null || v === undefined) return best;
+                if (best === null) return v;
+                return lowerIsBetter ? (Math.abs(v) < Math.abs(best) ? v : best) : (v > best ? v : best);
+            }, null);
+            return best !== null && val === best;
+        },
+
+        toggleSort(column) {
+            if (this.sortColumn === column) {
+                // Toggle direction
+                this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                // New column, default to descending (highest first for metrics)
+                this.sortColumn = column;
+                // For max_drawdown and tax_drag_pp, ascending is "better" (less negative)
+                // For strategy_name, ascending (A-Z) makes more sense
+                if (column === 'max_drawdown' || column === 'tax_drag_pp' || column === 'strategy_name') {
+                    this.sortDirection = 'asc';
+                } else {
+                    this.sortDirection = 'desc';
+                }
+            }
+        },
+
+        async runComparison() {
+            if (this.form.selected_strategies.length < 1) {
+                this.error = 'Please select at least one strategy to compare.';
+                return;
+            }
+
+            this.loading = true;
+            this.error = null;
+            this.result = null;
+            this.startTimer();
+            this.cancelRequested = false;
+            const runId = (crypto?.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random()}`;
+            this.currentRunId = runId;
+            this.startProgressPolling(runId);
+
+            try {
+                const sectorCaps = parseKeyValueMap(this.form.sector_caps_text, true);
+                const tickerSectors = parseKeyValueMap(this.form.ticker_sectors_text, false);
+                // Build strategies array
+                const strategies = this.form.selected_strategies.map(s => ({
+                    strategy: s,
+                    params: {}
+                }));
+
+                const response = await fetch('/api/v1/compare', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        strategies: strategies,
+                        run_id: runId,
+                        start_date: this.form.start_date,
+                        end_date: this.form.end_date || null,
+                        initial_capital: this.form.initial_capital,
+                        benchmark: this.form.benchmark,
+                        metric_basis: this.form.metric_basis,
+                        tax_enabled: this.form.tax_enabled,
+                        tax_exemption: this.form.tax_exemption,
+                        costs_pct: this.form.costs_pct / 100,
+                        drip_enabled: this.form.drip_enabled,
+                        skip_failed: this.form.skip_failed,
+                        execution_lag_days: this.form.execution_lag_days,
+                        max_volume_participation: this.form.max_volume_participation,
+                        min_daily_dollar_volume: this.form.min_daily_dollar_volume,
+                        liquidity_on_missing_volume: this.form.liquidity_on_missing_volume,
+                        max_position: this.form.max_position,
+                        turnover_budget: this.form.turnover_budget,
+                        sector_caps: sectorCaps,
+                        ticker_sectors: tickerSectors,
+                        drawdown_brake_threshold: this.form.drawdown_brake_threshold,
+                        drawdown_brake_cash_target: this.form.drawdown_brake_cash_target,
+                        drawdown_brake_release: this.form.drawdown_brake_release,
+                        enable_validation: true,
+                    })
+                });
+
+                if (!response.ok) {
+                    let errorMsg = 'Failed to run comparison';
+                    try {
+                        const err = await response.json();
+                        if (typeof err.detail === 'string') {
+                            errorMsg = err.detail;
+                        } else if (err.detail && typeof err.detail === 'object') {
+                            // Handle validation errors which may be arrays/objects
+                            errorMsg = JSON.stringify(err.detail);
+                        } else if (err.message) {
+                            errorMsg = err.message;
+                        }
+                    } catch (parseErr) {
+                        // Response wasn't JSON, try to get text
+                        try {
+                            errorMsg = await response.text();
+                            if (errorMsg.length > 200) {
+                                errorMsg = errorMsg.substring(0, 200) + '...';
+                            }
+                        } catch {
+                            errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                        }
+                    }
+                    throw new Error(errorMsg);
+                }
+
+                this.result = await response.json();
+
+                this.$nextTick(() => this.renderEquityChart());
+            } catch (e) {
+                if (this.cancelRequested) {
+                    this.error = 'Comparison cancelled.';
+                } else {
+                    this.error = e.message;
+                }
+            } finally {
+                this.stopTimer();
+                this.stopProgressPolling();
+                this.loading = false;
+            }
+        },
+
+        get progressSummary() {
+            if (!this.progressData) return 'Initializing comparison...';
+            if (this.progressData.status === 'pending') return 'Waiting for comparison to start...';
+            if (this.progressData.status === 'cancelling') return 'Cancelling comparison...';
+            if (this.progressData.status === 'cancelled') return 'Comparison cancelled';
+            if (!this.progressData.strategy_index) return 'Preparing comparison...';
+            const name = this.progressData.strategy_name || 'Preparing';
+            const eta = this.estimateEta(this.progressData.strategy_index, this.progressData.strategy_total);
+            return `Strategy ${this.progressData.strategy_index}/${this.progressData.strategy_total}: ${name}${eta ? ` · ETA ${eta}` : ''}`;
+        },
+
+        startProgressPolling(runId) {
+            this.progressData = null;
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+            }
+            const poll = async () => {
+                try {
+                    const response = await fetch(`/api/v1/compare/progress/${runId}`);
+                    if (!response.ok) {
+                        return;
+                    }
+                    this.progressData = await response.json();
+                } catch {
+                    // Ignore polling errors while comparison is running
+                }
+            };
+            poll();
+            this.progressInterval = setInterval(poll, 1000);
+        },
+
+        stopProgressPolling() {
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+                this.progressInterval = null;
+            }
+        },
+
+        async cancelCompare() {
+            if (!this.currentRunId) return;
+            this.cancelRequested = true;
+            try {
+                await fetch(`/api/v1/compare/cancel/${this.currentRunId}`, { method: 'POST' });
+            } catch {
+                // Ignore cancellation errors
+            }
+        },
+
+        startTimer() {
+            this.elapsedSeconds = 0;
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+            }
+            this.elapsedTimer = setInterval(() => {
+                this.elapsedSeconds += 1;
+            }, 1000);
+        },
+
+        stopTimer() {
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+                this.elapsedTimer = null;
+            }
+        },
+
+        estimateEta(completed, total) {
+            const elapsed = this.elapsedSeconds;
+            if (!elapsed || !completed || !total || completed <= 0 || total <= 0 || completed >= total) {
+                return '';
+            }
+            const remaining = Math.ceil((elapsed * (total - completed)) / completed);
+            return formatDuration(remaining);
+        },
+
+        renderEquityChart() {
+            if (!this.result || !this.result.rows) return;
+
+            const colors = CHART_COLORS;
+
+            const traces = [];
+
+            this.result.rows.forEach((row, idx) => {
+                if (!row.equity_curve || !row.equity_curve.dates) return;
+
+                // Normalize to 100
+                const values = row.equity_curve.values;
+                const startVal = values[0];
+                const normalized = values.map(v => (v / startVal) * 100);
+
+                traces.push({
+                    x: row.equity_curve.dates,
+                    y: normalized,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: row.strategy_name,
+                    line: {
+                        color: row.is_benchmark ? '#6b7280' : colors[idx % colors.length],
+                        width: row.is_benchmark ? 2 : 2,
+                        dash: row.is_benchmark ? 'dash' : 'solid'
+                    }
+                });
+            });
+
+            const layout = getPlotlyLayout({
+                showlegend: true,
+                legend: { x: 0.01, y: 0.99, xanchor: 'left', yanchor: 'top' },
+                xaxis: { type: 'date' },
+                yaxis: { title: 'Value (Start = 100)' },
+            });
+
+            Plotly.newPlot('equity-chart', traces, layout, { responsive: true });
+        }
+    };
+}
+</script>
+{% endblock %}

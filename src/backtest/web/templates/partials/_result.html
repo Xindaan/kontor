@@ -1,0 +1,484 @@
+{# Result partial - loaded via HTMX after backtest completes #}
+
+{% if result %}
+<div class="space-y-6">
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="kpi-card kpi-card--neutral">
+            <div class="text-sm text-gray-500">Final Value</div>
+            <div class="text-xl font-bold font-mono text-gray-900">
+                {{ "%.0f" | format(result.final_value) }} EUR
+            </div>
+            <div class="text-xs text-gray-400">{{ "%.1f" | format(result.years) }} years</div>
+        </div>
+        <div class="kpi-card {% if result.metrics.cagr >= 0 %}kpi-card--positive{% else %}kpi-card--negative{% endif %}">
+            <div class="text-sm text-gray-500">CAGR</div>
+            <div class="text-xl font-bold font-mono {% if result.metrics.cagr >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                {{ "%.2f" | format(result.metrics.cagr * 100) }}%
+            </div>
+        </div>
+        <div class="kpi-card kpi-card--neutral">
+            <div class="text-sm text-gray-500">Sharpe Ratio</div>
+            <div class="text-xl font-bold font-mono text-gray-900">
+                {{ "%.2f" | format(result.metrics.sharpe_ratio) }}
+            </div>
+        </div>
+        <div class="kpi-card kpi-card--negative">
+            <div class="text-sm text-gray-500">Max Drawdown</div>
+            <div class="text-xl font-bold font-mono text-red-600">
+                {{ "%.2f" | format(result.metrics.max_drawdown * 100) }}%
+            </div>
+        </div>
+    </div>
+
+    <!-- Gross vs Net Comparison (if tax enabled) -->
+    {% if result.tax_enabled and result.metrics_gross and result.metrics_net %}
+    <div class="card">
+        <div class="px-6 py-4 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">Gross vs Net Comparison</h3>
+        </div>
+        <div class="p-6 overflow-x-auto scroll-shadow">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="border-b">
+                        <th class="text-left py-2 px-3 text-gray-500 font-medium">Metric</th>
+                        <th class="text-right py-2 px-3 text-gray-500 font-medium">Gross</th>
+                        <th class="text-right py-2 px-3 text-gray-500 font-medium">Net (Realized)</th>
+                        <th class="text-right py-2 px-3 text-gray-500 font-medium">Net (Liquidation)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="py-2 px-3 text-gray-700">Final Value</td>
+                        <td class="text-right py-2 px-3 font-medium font-mono">{{ "%.0f" | format(result.final_value_gross or result.final_value) }} EUR</td>
+                        <td class="text-right py-2 px-3 font-mono">{{ "%.0f" | format(result.final_value) }} EUR</td>
+                        <td class="text-right py-2 px-3 font-mono">{{ "%.0f" | format(result.final_value_net or result.final_value) }} EUR</td>
+                    </tr>
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="py-2 px-3 text-gray-700">CAGR</td>
+                        <td class="text-right py-2 px-3 font-medium font-mono {% if result.metrics_gross.cagr >= 0 %}text-green-600{% else %}text-red-600{% endif %}">{{ "%.2f" | format(result.metrics_gross.cagr * 100) }}%</td>
+                        <td class="text-right py-2 px-3 font-mono {% if result.metrics.cagr >= 0 %}text-green-600{% else %}text-red-600{% endif %}">{{ "%.2f" | format(result.metrics.cagr * 100) }}%</td>
+                        <td class="text-right py-2 px-3 font-mono {% if result.metrics_net.cagr >= 0 %}text-green-600{% else %}text-red-600{% endif %}">{{ "%.2f" | format(result.metrics_net.cagr * 100) }}%</td>
+                    </tr>
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="py-2 px-3 text-gray-700">Sharpe Ratio</td>
+                        <td class="text-right py-2 px-3 font-medium font-mono">{{ "%.2f" | format(result.metrics_gross.sharpe_ratio) }}</td>
+                        <td class="text-right py-2 px-3 font-mono">{{ "%.2f" | format(result.metrics.sharpe_ratio) }}</td>
+                        <td class="text-right py-2 px-3 font-mono">{{ "%.2f" | format(result.metrics_net.sharpe_ratio) }}</td>
+                    </tr>
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="py-2 px-3 text-gray-700">Max Drawdown</td>
+                        <td class="text-right py-2 px-3 font-medium font-mono text-red-600">{{ "%.2f" | format(result.metrics_gross.max_drawdown * 100) }}%</td>
+                        <td class="text-right py-2 px-3 font-mono text-red-600">{{ "%.2f" | format(result.metrics.max_drawdown * 100) }}%</td>
+                        <td class="text-right py-2 px-3 font-mono text-red-600">{{ "%.2f" | format(result.metrics_net.max_drawdown * 100) }}%</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 px-3 text-gray-700">Total Return</td>
+                        <td class="text-right py-2 px-3 font-medium font-mono">{{ "%.2f" | format(result.metrics_gross.total_return * 100) }}%</td>
+                        <td class="text-right py-2 px-3 font-mono">{{ "%.2f" | format(result.metrics.total_return * 100) }}%</td>
+                        <td class="text-right py-2 px-3 font-mono">{{ "%.2f" | format(result.metrics_net.total_return * 100) }}%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Equity Chart -->
+    <div class="card">
+        <div class="px-6 py-4 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">Equity Curve</h3>
+        </div>
+        <div id="equity-chart" class="p-4" style="height: 400px;"></div>
+    </div>
+
+    <!-- Detailed Metrics -->
+    <div class="card">
+        <div class="px-6 py-4 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">Detailed Metrics</h3>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <div class="text-sm text-gray-500">Total Return</div>
+                    <div class="font-medium font-mono">{{ "%.2f" | format(result.metrics.total_return * 100) }}%</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Volatility</div>
+                    <div class="font-medium font-mono">{{ "%.2f" | format(result.metrics.volatility * 100) }}%</div>
+                </div>
+                {% if result.metrics.sortino_ratio %}
+                <div>
+                    <div class="text-sm text-gray-500">Sortino Ratio</div>
+                    <div class="font-medium font-mono">{{ "%.2f" | format(result.metrics.sortino_ratio) }}</div>
+                </div>
+                {% endif %}
+                {% if result.metrics.calmar_ratio %}
+                <div>
+                    <div class="text-sm text-gray-500">Calmar Ratio</div>
+                    <div class="font-medium font-mono">{{ "%.2f" | format(result.metrics.calmar_ratio) }}</div>
+                </div>
+                {% endif %}
+                <div>
+                    <div class="text-sm text-gray-500">Max DD Duration</div>
+                    <div class="font-medium">{{ result.metrics.max_drawdown_duration }} days</div>
+                </div>
+                {% if result.metrics.win_rate_monthly %}
+                <div>
+                    <div class="text-sm text-gray-500">Win Rate (Monthly)</div>
+                    <div class="font-medium font-mono">{{ "%.2f" | format(result.metrics.win_rate_monthly * 100) }}%</div>
+                </div>
+                {% endif %}
+                {% if result.metrics.best_month %}
+                <div>
+                    <div class="text-sm text-gray-500">Best Month</div>
+                    <div class="font-medium font-mono text-green-600">{{ "%.2f" | format(result.metrics.best_month * 100) }}%</div>
+                </div>
+                {% endif %}
+                {% if result.metrics.worst_month %}
+                <div>
+                    <div class="text-sm text-gray-500">Worst Month</div>
+                    <div class="font-medium font-mono text-red-600">{{ "%.2f" | format(result.metrics.worst_month * 100) }}%</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Trading Costs -->
+    {% if result.trading_costs %}
+    <div class="card">
+        <div class="px-6 py-4 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">Trading Costs</h3>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div>
+                    <div class="text-sm text-gray-500">Total Costs</div>
+                    <div class="font-medium font-mono">{{ "%.2f" | format(result.trading_costs.total_costs) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Costs per Year</div>
+                    <div class="font-medium font-mono">{{ "%.2f" | format(result.trading_costs.costs_per_year) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Costs % of Final</div>
+                    <div class="font-medium font-mono">{{ "%.2f" | format(result.trading_costs.costs_pct_of_final) }}%</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Number of Trades</div>
+                    <div class="font-medium">{{ result.trading_costs.num_trades }}</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Annual Turnover</div>
+                    <div class="font-medium font-mono">{{ "%.0f" | format(result.trading_costs.turnover_annual) }}%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if result.tax_enabled and result.tax_summary %}
+    <!-- Tax Summary -->
+    <div class="card">
+        <div class="px-6 py-4 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">Tax Impact</h3>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <div class="text-sm text-gray-500">Total Tax Paid</div>
+                    <div class="font-medium font-mono">{{ "%.0f" | format(result.tax_summary.total_tax_paid) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Effective Tax Rate</div>
+                    <div class="font-medium font-mono">{{ "%.2f" | format(result.tax_summary.effective_tax_rate * 100) }}%</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Tax Drag (CAGR)</div>
+                    <div class="font-medium font-mono text-red-600">{{ "%.2f" | format(result.tax_summary.tax_drag_cagr_pp) }} pp</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Tax Drag (Final)</div>
+                    <div class="font-medium font-mono text-red-600">{{ "%.2f" | format(result.tax_summary.tax_drag_final_pct) }}%</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Realized Gains</div>
+                    <div class="font-medium font-mono text-green-600">{{ "%.0f" | format(result.tax_summary.total_realized_gains) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Realized Losses</div>
+                    <div class="font-medium font-mono text-red-600">{{ "%.0f" | format(result.tax_summary.total_realized_losses) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Net Realized Gain</div>
+                    <div class="font-medium font-mono">{{ "%.0f" | format(result.tax_summary.net_realized_gain) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Exemption Used</div>
+                    <div class="font-medium font-mono">{{ "%.0f" | format(result.tax_summary.exemption_used) }} EUR</div>
+                </div>
+            </div>
+            {% if result.tax_summary.unrealized_gain_at_end or result.tax_summary.tax_paid_liquidation %}
+            <div class="mt-4 pt-4 border-t grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <div class="text-sm text-gray-500">Unrealized Gain</div>
+                    <div class="font-medium font-mono {% if result.tax_summary.unrealized_gain_at_end >= 0 %}text-green-600{% else %}text-red-600{% endif %}">{{ "%.0f" | format(result.tax_summary.unrealized_gain_at_end) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Liquidation Tax</div>
+                    <div class="font-medium font-mono text-red-600">{{ "%.0f" | format(result.tax_summary.tax_paid_liquidation) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Total Tax (incl. Liq.)</div>
+                    <div class="font-medium font-mono">{{ "%.0f" | format(result.tax_summary.total_tax_paid + result.tax_summary.tax_paid_liquidation) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Eff. Rate (incl. Liq.)</div>
+                    {% set total_gain = result.tax_summary.net_realized_gain + result.tax_summary.unrealized_gain_at_end %}
+                    {% set total_tax = result.tax_summary.total_tax_paid + result.tax_summary.tax_paid_liquidation %}
+                    <div class="font-medium font-mono">{{ "%.2f" | format((total_tax / total_gain * 100) if total_gain > 0 else 0) }}%</div>
+                </div>
+            </div>
+            {% endif %}
+            <div class="mt-4 pt-4 border-t grid grid-cols-3 gap-4">
+                <div>
+                    <div class="text-sm text-gray-500">Final Value (Gross)</div>
+                    <div class="font-medium font-mono">{{ "%.0f" | format(result.tax_summary.final_value_gross) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Final Value (Net Realized)</div>
+                    <div class="font-medium font-mono">{{ "%.0f" | format(result.tax_summary.final_value_net_realized) }} EUR</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">Final Value (Liquidation)</div>
+                    <div class="font-medium font-mono">{{ "%.0f" | format(result.tax_summary.final_value_net_liquidation) }} EUR</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Monthly Returns Heatmap -->
+    {% if result.monthly_returns %}
+    <div class="card">
+        <div class="px-6 py-4 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">Monthly Returns</h3>
+        </div>
+        <div class="p-4 overflow-x-auto scroll-shadow">
+            <div id="monthly-heatmap"></div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Trades Table -->
+    {% if result.trades %}
+    <div class="card" x-data="{ open: false }">
+        <div class="px-6 py-4 border-b flex justify-between items-center cursor-pointer"
+             @click="open = !open">
+            <h3 class="text-lg font-semibold text-gray-900">Recent Trades ({{ result.trades | length }})</h3>
+            <svg class="w-5 h-5 text-gray-500 transform transition-transform"
+                 :class="{ 'rotate-180': open }"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </div>
+        <div x-show="open" x-collapse class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="text-left py-2 px-3 text-gray-500 font-medium">Date</th>
+                        <th class="text-left py-2 px-3 text-gray-500 font-medium">Ticker</th>
+                        <th class="text-left py-2 px-3 text-gray-500 font-medium">Action</th>
+                        <th class="text-right py-2 px-3 text-gray-500 font-medium">Shares</th>
+                        <th class="text-right py-2 px-3 text-gray-500 font-medium">Price</th>
+                        <th class="text-right py-2 px-3 text-gray-500 font-medium">Value</th>
+                        <th class="text-right py-2 px-3 text-gray-500 font-medium">Costs</th>
+                        {% if result.tax_enabled %}
+                        <th class="text-right py-2 px-3 text-gray-500 font-medium">Tax</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for trade in result.trades %}
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="py-2 px-3 font-mono text-gray-700">{{ trade.date }}</td>
+                        <td class="py-2 px-3 font-medium">{{ trade.ticker }}</td>
+                        <td class="py-2 px-3">
+                            <span class="badge {% if trade.action == 'BUY' %}badge--buy{% else %}badge--sell{% endif %}">
+                                {{ trade.action }}
+                            </span>
+                        </td>
+                        <td class="text-right py-2 px-3 font-mono">{{ "%.2f" | format(trade.shares) }}</td>
+                        <td class="text-right py-2 px-3 font-mono">{{ "%.2f" | format(trade.price) }} EUR</td>
+                        <td class="text-right py-2 px-3 font-mono">{{ "%.0f" | format(trade.value) }} EUR</td>
+                        <td class="text-right py-2 px-3 font-mono text-gray-500">{{ "%.2f" | format(trade.costs) }} EUR</td>
+                        {% if result.tax_enabled %}
+                        <td class="text-right py-2 px-3 font-mono text-gray-500">
+                            {% if trade.tax_paid %}{{ "%.2f" | format(trade.tax_paid) }} EUR{% else %}-{% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Metric Definitions -->
+    <div class="card" x-data="{ open: false }">
+        <div class="px-6 py-4 border-b cursor-pointer"
+             @click="open = !open">
+            <div class="flex justify-between items-center">
+                <h3 class="text-lg font-semibold text-gray-900">Metric Definitions</h3>
+                <svg class="w-5 h-5 text-gray-500 transform transition-transform"
+                     :class="{ 'rotate-180': open }"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </div>
+        </div>
+        <div x-show="open" x-collapse class="p-6">
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="font-medium text-gray-700">CAGR (Compound Annual Growth Rate)</dt>
+                    <dd class="text-gray-500">Annualized return over the entire period, accounting for compounding.</dd>
+                </div>
+                <div>
+                    <dt class="font-medium text-gray-700">Sharpe Ratio</dt>
+                    <dd class="text-gray-500">Risk-adjusted return measuring excess return per unit of volatility. Higher is better.</dd>
+                </div>
+                <div>
+                    <dt class="font-medium text-gray-700">Sortino Ratio</dt>
+                    <dd class="text-gray-500">Similar to Sharpe but only considers downside volatility. Higher is better.</dd>
+                </div>
+                <div>
+                    <dt class="font-medium text-gray-700">Max Drawdown</dt>
+                    <dd class="text-gray-500">Largest peak-to-trough decline during the backtest period.</dd>
+                </div>
+                <div>
+                    <dt class="font-medium text-gray-700">Calmar Ratio</dt>
+                    <dd class="text-gray-500">CAGR divided by maximum drawdown. Measures return per unit of drawdown risk.</dd>
+                </div>
+                <div>
+                    <dt class="font-medium text-gray-700">Volatility</dt>
+                    <dd class="text-gray-500">Annualized standard deviation of returns.</dd>
+                </div>
+                <div>
+                    <dt class="font-medium text-gray-700">Win Rate (Monthly)</dt>
+                    <dd class="text-gray-500">Percentage of months with positive returns.</dd>
+                </div>
+                <div>
+                    <dt class="font-medium text-gray-700">Annual Turnover</dt>
+                    <dd class="text-gray-500">Percentage of portfolio traded per year (100% = entire portfolio replaced once).</dd>
+                </div>
+                <div>
+                    <dt class="font-medium text-gray-700">Tax Drag (CAGR)</dt>
+                    <dd class="text-gray-500">Percentage points of CAGR lost to taxes annually.</dd>
+                </div>
+                <div>
+                    <dt class="font-medium text-gray-700">Tax Drag (Final)</dt>
+                    <dd class="text-gray-500">Percentage of final value lost to taxes over entire period.</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<script>
+// Render charts after HTMX swap
+(function() {
+    const data = {{ result | tojson }};
+
+    // Equity Chart
+    if (data.equity_curve) {
+        const traces = [{
+            x: data.equity_curve.dates,
+            y: data.equity_curve.values,
+            type: 'scatter',
+            mode: 'lines',
+            name: data.strategy_name,
+            line: { color: CHART_COLORS[0] }
+        }];
+
+        if (data.benchmark_curve) {
+            traces.push({
+                x: data.benchmark_curve.dates,
+                y: data.benchmark_curve.values,
+                type: 'scatter',
+                mode: 'lines',
+                name: data.benchmark_name || 'Benchmark',
+                line: { color: '#9ca3af', dash: 'dash' }
+            });
+        }
+
+        const layout = getPlotlyLayout({
+            yaxis: { title: 'Portfolio Value (EUR)' },
+            legend: { orientation: 'h', y: -0.15 },
+            hovermode: 'x unified'
+        });
+
+        Plotly.newPlot('equity-chart', traces, layout, { responsive: true });
+    }
+
+    // Monthly Returns Heatmap
+    if (data.monthly_returns && data.monthly_returns.length > 0) {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        // Group by year
+        const byYear = {};
+        data.monthly_returns.forEach(mr => {
+            if (!byYear[mr.year]) byYear[mr.year] = {};
+            byYear[mr.year][mr.month] = mr.return_pct;
+        });
+
+        const years = Object.keys(byYear).sort();
+        const z = [];
+        const text = [];
+
+        years.forEach(year => {
+            const row = [];
+            const textRow = [];
+            for (let m = 1; m <= 12; m++) {
+                const val = byYear[year][m];
+                row.push(val !== undefined ? val : null);
+                textRow.push(val !== undefined ? val.toFixed(1) + '%' : '');
+            }
+            z.push(row);
+            text.push(textRow);
+        });
+
+        const heatmapData = [{
+            z: z,
+            x: months,
+            y: years,
+            type: 'heatmap',
+            colorscale: [
+                [0, '#dc2626'],
+                [0.5, '#fafafa'],
+                [1, '#16a34a']
+            ],
+            zmid: 0,
+            text: text,
+            texttemplate: '%{text}',
+            textfont: { size: 10 },
+            hovertemplate: '%{y} %{x}: %{z:.2f}%<extra></extra>',
+            showscale: true,
+            colorbar: {
+                title: 'Return %',
+                ticksuffix: '%'
+            }
+        }];
+
+        const heatmapLayout = getPlotlyLayout({
+            yaxis: { title: '', autorange: 'reversed' },
+            xaxis: { title: '' },
+            margin: { t: 20, r: 80, b: 40, l: 60 }
+        });
+
+        Plotly.newPlot('monthly-heatmap', heatmapData, heatmapLayout, { responsive: true });
+    }
+})();
+</script>
+{% endif %}

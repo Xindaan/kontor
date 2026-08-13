@@ -1,0 +1,67 @@
+{# Dynamic parameter form partial - loaded via HTMX #}
+
+{% if schema and schema.parameters %}
+<div class="space-y-3">
+    {% for param in schema.parameters %}
+    <div>
+        <label class="block text-sm text-gray-600 mb-1">
+            {{ param.name }}
+            {% if param.required %}<span class="text-red-500">*</span>{% endif %}
+        </label>
+
+        {% if param.choices %}
+        {# Enum/Choice field #}
+        <select name="params[{{ param.name }}]"
+                class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                {% if param.required %}required{% endif %}>
+            {% for choice in param.choices %}
+            <option value="{{ choice }}"
+                    {% if param.default == choice %}selected{% endif %}>
+                {{ choice }}
+            </option>
+            {% endfor %}
+        </select>
+
+        {% elif param.type == 'boolean' %}
+        {# Boolean checkbox #}
+        <input type="checkbox"
+               name="params[{{ param.name }}]"
+               {% if param.default %}checked{% endif %}
+               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+
+        {% elif param.type in ['integer', 'number'] %}
+        {# Numeric input #}
+        <input type="number"
+               name="params[{{ param.name }}]"
+               value="{{ param.default if param.default is not none else '' }}"
+               step="{{ '1' if param.type == 'integer' else '0.01' }}"
+               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+               {% if param.required %}required{% endif %}>
+
+        {% else %}
+        {# String/default input #}
+        <input type="text"
+               name="params[{{ param.name }}]"
+               value="{{ param.default if param.default is not none else '' }}"
+               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+               {% if param.required %}required{% endif %}>
+        {% endif %}
+
+        {% if param.description %}
+        <p class="text-xs text-gray-400 mt-1">{{ param.description }}</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+{% if schema.assets %}
+<div class="mt-4 pt-4 border-t">
+    <p class="text-sm text-gray-500">
+        <strong>Assets:</strong> {{ schema.assets | join(', ') }}
+    </p>
+</div>
+{% endif %}
+
+{% else %}
+<p class="text-sm text-gray-500">This strategy has no configurable parameters.</p>
+{% endif %}

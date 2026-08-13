@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Welcome Section -->
+    <div class="card p-6">
+        <h1 class="text-2xl font-bold text-gray-900 mb-2">Kontor</h1>
+        <p class="text-gray-600">
+            A modular Python framework for systematic backtesting of investment strategies
+            with German tax support.
+        </p>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <a href="/run" class="card p-5 hover:border-slate-300 transition-colors flex items-start gap-4">
+            <div class="icon-container bg-blue-50 text-blue-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <div>
+                <h3 class="font-semibold text-gray-900">Run Backtest</h3>
+                <p class="text-sm text-gray-500">Execute a single strategy backtest</p>
+            </div>
+        </a>
+
+        <a href="/signals" class="card p-5 hover:border-slate-300 transition-colors flex items-start gap-4">
+            <div class="icon-container bg-cyan-50 text-cyan-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8L10 18l-5-5-7 7"></path>
+                </svg>
+            </div>
+            <div>
+                <h3 class="font-semibold text-gray-900">Signals</h3>
+                <p class="text-sm text-gray-500">Generate live orders and drift checks</p>
+            </div>
+        </a>
+
+        <a href="/compare" class="card p-5 hover:border-slate-300 transition-colors flex items-start gap-4">
+            <div class="icon-container bg-blue-50 text-blue-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+            </div>
+            <div>
+                <h3 class="font-semibold text-gray-900">Compare Strategies</h3>
+                <p class="text-sm text-gray-500">Compare multiple strategies side by side</p>
+            </div>
+        </a>
+
+        <a href="/sweep" class="card p-5 hover:border-slate-300 transition-colors flex items-start gap-4">
+            <div class="icon-container bg-purple-50 text-purple-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
+                </svg>
+            </div>
+            <div>
+                <h3 class="font-semibold text-gray-900">Sweep Analysis</h3>
+                <p class="text-sm text-gray-500">Run robustness tests with rolling windows</p>
+            </div>
+        </a>
+
+        <a href="/batch-optimize" class="card p-5 hover:border-slate-300 transition-colors flex items-start gap-4">
+            <div class="icon-container bg-green-50 text-green-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                </svg>
+            </div>
+            <div>
+                <h3 class="font-semibold text-gray-900">Batch Optimize</h3>
+                <p class="text-sm text-gray-500">Optimize parameters across strategies</p>
+            </div>
+        </a>
+
+        <a href="/manual-data" class="card p-5 hover:border-slate-300 transition-colors flex items-start gap-4">
+            <div class="icon-container bg-orange-50 text-orange-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z"></path>
+                </svg>
+            </div>
+            <div>
+                <h3 class="font-semibold text-gray-900">Manual Data</h3>
+                <p class="text-sm text-gray-500">Register provenance for manual inputs</p>
+            </div>
+        </a>
+    </div>
+
+    <!-- Available Strategies -->
+    <div class="card" x-data="{ search: '' }">
+        <div class="px-6 py-4 border-b flex justify-between items-center gap-4">
+            <h2 class="text-lg font-semibold text-gray-900 whitespace-nowrap">Available Strategies</h2>
+            {% if strategies %}
+            <input type="text"
+                   x-model="search"
+                   placeholder="Filter strategies..."
+                   class="w-full max-w-xs border rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
+            {% endif %}
+        </div>
+        <div class="p-6">
+            {% if strategies %}
+            <div class="grid gap-3">
+                {% for strategy in strategies %}
+                <div class="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                     x-show="!search || '{{ strategy.name|lower }}'.includes(search.toLowerCase()) || '{{ strategy.file_name|lower }}'.includes(search.toLowerCase())">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-medium text-gray-900">{{ strategy.name }}</h3>
+                            {% if strategy.description %}
+                            <p class="text-sm text-gray-500 mt-1">{{ strategy.description[:200] }}{% if strategy.description|length > 200 %}...{% endif %}</p>
+                            {% endif %}
+                            <div class="mt-2 flex items-center space-x-4 text-xs text-gray-400">
+                                <span class="font-mono">{{ strategy.file_name }}</span>
+                                <span>{{ strategy.assets|length }} assets</span>
+                                <span>{{ strategy.rebalance_frequency }}</span>
+                            </div>
+                        </div>
+                        <a href="/run?strategy={{ strategy.file_path }}"
+                           class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 flex-shrink-0">
+                            Run
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-500">No strategies found in the <code class="font-mono text-sm bg-gray-100 px-1 rounded">strategies/</code> directory.</p>
+            <p class="text-sm text-gray-400 mt-2">
+                Create a Python file with a Strategy subclass to get started.
+            </p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

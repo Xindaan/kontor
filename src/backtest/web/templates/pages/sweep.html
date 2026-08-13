@@ -1,0 +1,1011 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="sweep()" class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Sweep Analysis</h1>
+            <p class="text-sm text-gray-500 mt-1">Test strategy robustness across multiple time windows</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Form -->
+        <div class="lg:col-span-1">
+            <form @submit.prevent="runSweep" novalidate class="card">
+                <div class="px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Configuration</h2>
+                </div>
+
+                <div class="p-6 space-y-4">
+                    <!-- Strategy Selection (multi-select) -->
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="block text-sm font-medium text-gray-700">Strategies</label>
+                            <button type="button"
+                                    @click="toggleSelectAll()"
+                                    class="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                                <span x-text="form.selected_strategies.length === allStrategies.length ? 'Deselect All' : 'Select All'"></span>
+                            </button>
+                        </div>
+                        <div class="space-y-2 max-h-48 overflow-y-auto border rounded-md p-2">
+                            {% for strategy in strategies %}
+                            <label class="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                <input type="checkbox"
+                                       value="{{ strategy.file_path }}"
+                                       x-model="form.selected_strategies"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm">{{ strategy.name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1" x-text="form.selected_strategies.length + ' of ' + allStrategies.length + ' selected'"></p>
+                    </div>
+
+                    <!-- Windowing Configuration -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Window Settings</h3>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Mode</label>
+                                <select x-model="form.mode"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="rolling">Rolling</option>
+                                    <option value="end-fixed">End-Fixed</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Window Length</label>
+                                <select x-model="form.window_length"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="3y">3 Years</option>
+                                    <option value="5y">5 Years</option>
+                                    <option value="7y">7 Years</option>
+                                    <option value="10y">10 Years</option>
+                                    <option value="15y">15 Years</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 mt-3">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Start Grid</label>
+                                <select x-model="form.start_grid"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="monthly">Monthly</option>
+                                    <option value="quarterly">Quarterly</option>
+                                    <option value="yearly">Yearly</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Step</label>
+                                <input type="number" x-model.number="form.step" min="1" max="12"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 mt-3">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">From Date</label>
+                                <input type="date" x-model="form.from_date"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div x-show="form.mode === 'end-fixed'" x-cloak>
+                                <label class="block text-sm text-gray-600 mb-1">End Date</label>
+                                <input type="date" x-model="form.end_date"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Parameters Upload -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Optimized Parameters (Optional)</h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center space-x-2">
+                                <input type="file" @change="loadParamsFile" accept=".json"
+                                       class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+                            </div>
+                            <p class="text-xs text-gray-500">
+                                Upload <code class="bg-gray-100 px-1 rounded">optimized_params.json</code> from batch-optimize
+                            </p>
+                            <div x-show="loadedParams" class="bg-green-50 border border-green-200 rounded-md p-2">
+                                <p class="text-xs text-green-700">
+                                    <span class="font-semibold">Params loaded:</span>
+                                    <span x-text="Object.keys(loadedParams || {}).length"></span> strategies
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Backtest Settings -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Backtest Settings</h3>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Capital</label>
+                                <input type="number" x-model.number="form.initial_capital" min="100" step="1000"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Benchmark</label>
+                                <input type="text" x-model="form.benchmark"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <label class="block text-sm text-gray-600 mb-1">Metric Basis</label>
+                            <select x-model="form.metric_basis"
+                                    class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="gross">Gross</option>
+                                <option value="net_realized">Net Realized</option>
+                                <option value="net_liquidation">Net Liquidation</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <div class="border-t pt-4" x-data="{ advOpen: false }">
+                        <button type="button" @click="advOpen = !advOpen" class="collapsible-trigger w-full">
+                            <span class="text-sm font-medium">Advanced Options</span>
+                            <svg class="collapsible-arrow" :class="advOpen && 'collapsible-arrow--open'" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <div x-show="advOpen" x-collapse class="mt-3 space-y-3">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Costs (%)</label>
+                                <input type="number" x-model.number="form.costs_pct" step="0.01" min="0"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Tax Exemption (EUR)</label>
+                                <input type="number" x-model.number="form.tax_exemption" step="100" min="0"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Execution Lag (days)</label>
+                                    <input type="number" x-model.number="form.execution_lag_days" min="0" step="1"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Max Volume Participation</label>
+                                    <input type="number" x-model.number="form.max_volume_participation" min="0" max="1" step="0.01"
+                                           placeholder="0.10 = 10%"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Min Daily $ Volume</label>
+                                    <input type="number" x-model.number="form.min_daily_dollar_volume" min="0" step="1000"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Missing Volume</label>
+                                    <select x-model="form.liquidity_on_missing_volume"
+                                            class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="allow">Allow Trade</option>
+                                        <option value="skip">Skip Trade</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="border-t pt-3">
+                                <p class="text-xs font-medium text-gray-700 mb-2">Risk Overlays</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Max Position</label>
+                                        <input type="number" x-model.number="form.max_position" min="0" max="1" step="0.01"
+                                               placeholder="0.25"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Turnover Budget</label>
+                                        <input type="number" x-model.number="form.turnover_budget" min="0" max="1" step="0.01"
+                                               placeholder="0.20"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <label class="block text-sm text-gray-600 mb-1">Sector Caps</label>
+                                    <input type="text" x-model="form.sector_caps_text" placeholder="equity=0.6, bonds=0.4"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div class="mt-3">
+                                    <label class="block text-sm text-gray-600 mb-1">Ticker Sectors</label>
+                                    <textarea x-model="form.ticker_sectors_text" rows="2" placeholder="SPY=equity, BND=bonds"
+                                              class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                                </div>
+                                <div class="grid grid-cols-3 gap-3 mt-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Brake Threshold</label>
+                                        <input type="number" x-model.number="form.drawdown_brake_threshold" min="0" max="1" step="0.01" placeholder="0.15"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Brake Cash</label>
+                                        <input type="number" x-model.number="form.drawdown_brake_cash_target" min="0" max="1" step="0.01"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Release</label>
+                                        <input type="number" x-model.number="form.drawdown_brake_release" min="0" max="1" step="0.01" placeholder="0.08"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="form.tax_enabled" id="tax_enabled"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="tax_enabled" class="ml-2 text-sm text-gray-700">Enable German Tax</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="form.drip_enabled" id="drip_enabled"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="drip_enabled" class="ml-2 text-sm text-gray-700">DRIP (Dividend Reinvestment)</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="form.skip_failed" id="skip_failed"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="skip_failed" class="ml-2 text-sm text-gray-700">Skip Failed Tickers</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="px-6 py-4 bg-gray-50 border-t rounded-b-lg">
+                    <button type="submit"
+                            :disabled="loading || form.selected_strategies.length === 0"
+                            class="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                        <span x-show="!loading">Run Sweep Analysis</span>
+                        <span x-show="loading" x-cloak class="flex items-center">
+                            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Running...
+                        </span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Results -->
+        <div class="lg:col-span-2">
+            <!-- Progress Indicator -->
+            <div x-show="loading" x-cloak class="card p-6">
+                <div class="flex items-center space-x-4">
+                    <svg class="animate-spin h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Running Sweep Analysis</h3>
+                        <p class="text-sm text-gray-600" x-text="progressSummary"></p>
+                        <p class="text-xs text-gray-500 mt-1" x-text="progressDetail"></p>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Elapsed: <span x-text="formatDuration(elapsedSeconds)"></span>
+                        </p>
+                        <button type="button"
+                                class="mt-3 text-xs text-red-600 hover:text-red-800 font-medium"
+                                x-show="!cancelRequested"
+                                @click="cancelSweep">
+                            Cancel Sweep
+                        </button>
+                        <p class="text-xs text-gray-500 mt-2" x-show="cancelRequested">Cancellation requested...</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-400 mt-2">Sweep analysis runs multiple backtests and may take several minutes...</p>
+            </div>
+
+            <!-- Error State -->
+            <div x-show="error" x-cloak class="bg-red-50 border border-red-200 rounded-lg p-6">
+                <h3 class="text-red-800 font-semibold mb-2">Error</h3>
+                <p class="text-red-600" x-text="error"></p>
+            </div>
+
+            <!-- Results -->
+            <div x-show="result && !loading" x-cloak class="space-y-6">
+                <!-- Summary Header -->
+                <div class="card p-4">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-900">Sweep Results</h2>
+                        <div class="text-sm text-gray-500">
+                            <span x-text="result.num_windows"></span> windows |
+                            <span x-text="result.summaries?.length || 0"></span> strategies |
+                            <span x-text="result.metric_basis?.replace('_', ' ')"></span>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-500">
+                        <span x-text="result.first_window_start"></span> to <span x-text="result.last_window_end"></span> |
+                        Mode: <span x-text="result.mode"></span> |
+                        Window: <span x-text="result.window_length"></span> |
+                        Benchmark: <span x-text="result.benchmark_ticker"></span>
+                    </div>
+                </div>
+
+                <!-- Summary Table -->
+                <div class="card overflow-hidden">
+                    <div class="px-6 py-4 border-b flex justify-between items-center">
+                        <h3 class="text-lg font-semibold text-gray-900">Strategy Rankings</h3>
+                        <span class="text-xs text-gray-500">Click column headers to sort</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th @click="toggleSort('rank')"
+                                        class="text-left py-3 px-4 text-gray-500 font-medium cursor-pointer hover:bg-gray-100 select-none">
+                                        <div class="flex items-center gap-1">
+                                            Rank
+                                            <template x-if="sortColumn === 'rank'">
+                                                <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                    </th>
+                                    <th @click="toggleSort('strategy_name')"
+                                        class="text-left py-3 px-4 text-gray-500 font-medium cursor-pointer hover:bg-gray-100 select-none">
+                                        <div class="flex items-center gap-1">
+                                            Strategy
+                                            <template x-if="sortColumn === 'strategy_name'">
+                                                <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                    </th>
+                                    <th @click="toggleSort('median_cagr_gross')"
+                                        class="text-right py-3 px-4 text-gray-500 font-medium cursor-pointer hover:bg-gray-100 select-none">
+                                        <div class="flex items-center justify-end gap-1">
+                                            CAGR (Gross)
+                                            <template x-if="sortColumn === 'median_cagr_gross'">
+                                                <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                    </th>
+                                    <th @click="toggleSort('net_cagr')"
+                                        class="text-right py-3 px-4 text-gray-500 font-medium cursor-pointer hover:bg-gray-100 select-none">
+                                        <div class="flex items-center justify-end gap-1">
+                                            CAGR (Net)
+                                            <template x-if="sortColumn === 'net_cagr'">
+                                                <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                    </th>
+                                    <th @click="toggleSort('tax_drag')"
+                                        class="text-right py-3 px-4 text-gray-500 font-medium cursor-pointer hover:bg-gray-100 select-none">
+                                        <div class="flex items-center justify-end gap-1">
+                                            Tax Drag
+                                            <template x-if="sortColumn === 'tax_drag'">
+                                                <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                    </th>
+                                    <th @click="toggleSort('p10_cagr')"
+                                        class="text-right py-3 px-4 text-gray-500 font-medium cursor-pointer hover:bg-gray-100 select-none">
+                                        <div class="flex items-center justify-end gap-1">
+                                            P10 CAGR
+                                            <template x-if="sortColumn === 'p10_cagr'">
+                                                <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                    </th>
+                                    <th @click="toggleSort('median_sharpe')"
+                                        class="text-right py-3 px-4 text-gray-500 font-medium cursor-pointer hover:bg-gray-100 select-none">
+                                        <div class="flex items-center justify-end gap-1">
+                                            Sharpe
+                                            <template x-if="sortColumn === 'median_sharpe'">
+                                                <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                    </th>
+                                    <th @click="toggleSort('worst_maxdd')"
+                                        class="text-right py-3 px-4 text-gray-500 font-medium cursor-pointer hover:bg-gray-100 select-none">
+                                        <div class="flex items-center justify-end gap-1">
+                                            Worst DD
+                                            <template x-if="sortColumn === 'worst_maxdd'">
+                                                <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                    </th>
+                                    <th @click="toggleSort('hit_rate_vs_benchmark')"
+                                        class="text-right py-3 px-4 text-gray-500 font-medium cursor-pointer hover:bg-gray-100 select-none">
+                                        <div class="flex items-center justify-end gap-1">
+                                            Hit Rate
+                                            <template x-if="sortColumn === 'hit_rate_vs_benchmark'">
+                                                <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                    </th>
+                                    <th @click="toggleSort('num_ok')"
+                                        class="text-right py-3 px-4 text-gray-500 font-medium cursor-pointer hover:bg-gray-100 select-none">
+                                        <div class="flex items-center justify-end gap-1">
+                                            OK/Total
+                                            <template x-if="sortColumn === 'num_ok'">
+                                                <svg class="w-3 h-3" :class="sortDirection === 'asc' ? '' : 'rotate-180'" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="s in sortedSummaries" :key="s.strategy_name">
+                                    <tr class="border-b hover:bg-gray-50">
+                                        <td class="py-3 px-4">
+                                            <span class="font-medium" x-text="s.rank"></span>
+                                            <span x-show="s.pareto_front" class="ml-1 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">Pareto</span>
+                                        </td>
+                                        <td class="py-3 px-4 font-medium" x-text="s.strategy_name"></td>
+                                        <td class="py-3 px-4 text-right"
+                                            :class="s.median_cagr_gross >= 0 ? 'text-green-600' : 'text-red-600'"
+                                            x-text="formatPercent(s.median_cagr_gross)"></td>
+                                        <td class="py-3 px-4 text-right"
+                                            :class="getNetCagr(s) >= 0 ? 'text-green-600' : 'text-red-600'"
+                                            x-text="formatPercent(getNetCagr(s))"></td>
+                                        <td class="py-3 px-4 text-right text-gray-500"
+                                            x-text="formatTaxDrag(s)"></td>
+                                        <td class="py-3 px-4 text-right"
+                                            :class="getP10Cagr(s) >= 0 ? 'text-green-600' : 'text-red-600'"
+                                            x-text="formatPercent(getP10Cagr(s))"></td>
+                                        <td class="py-3 px-4 text-right" x-text="s.median_sharpe?.toFixed(2) || '-'"></td>
+                                        <td class="py-3 px-4 text-right text-red-600" x-text="formatPercent(s.worst_maxdd)"></td>
+                                        <td class="py-3 px-4 text-right"
+                                            :class="(s.hit_rate_vs_benchmark || 0) >= 0.5 ? 'text-green-600' : 'text-red-600'"
+                                            x-text="s.hit_rate_vs_benchmark !== null ? formatPercent(s.hit_rate_vs_benchmark) : '-'"></td>
+                                        <td class="py-3 px-4 text-right text-gray-500" x-text="s.num_ok + '/' + s.num_windows"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- CAGR Distribution Chart -->
+                <div class="card">
+                    <div class="px-6 py-4 border-b">
+                        <h3 class="text-lg font-semibold text-gray-900">CAGR Distribution by Strategy</h3>
+                    </div>
+                    <div id="cagr-chart" class="p-4" style="height: 400px;"></div>
+                </div>
+
+                <!-- Max Drawdown Chart -->
+                <div class="card">
+                    <div class="px-6 py-4 border-b">
+                        <h3 class="text-lg font-semibold text-gray-900">Worst Max Drawdown by Strategy</h3>
+                    </div>
+                    <div id="maxdd-chart" class="p-4" style="height: 300px;"></div>
+                </div>
+
+                <!-- Detailed Metrics -->
+                <div x-data="{ detailsOpen: false }" class="card">
+                    <div class="px-6 py-4 border-b flex justify-between items-center cursor-pointer"
+                         @click="detailsOpen = !detailsOpen">
+                        <h3 class="text-lg font-semibold text-gray-900">Detailed Metrics</h3>
+                        <svg class="w-5 h-5 text-gray-500 transform transition-transform"
+                             :class="{ 'rotate-180': detailsOpen }"
+                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                    <div x-show="detailsOpen" x-collapse class="overflow-x-auto">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="text-left py-3 px-4 text-gray-500 font-medium">Strategy</th>
+                                    <th class="text-right py-3 px-4 text-gray-500 font-medium">P10 CAGR</th>
+                                    <th class="text-right py-3 px-4 text-gray-500 font-medium">Median CAGR</th>
+                                    <th class="text-right py-3 px-4 text-gray-500 font-medium">P90 CAGR</th>
+                                    <th class="text-right py-3 px-4 text-gray-500 font-medium">Worst CAGR</th>
+                                    <th class="text-right py-3 px-4 text-gray-500 font-medium">Best CAGR</th>
+                                    <th class="text-right py-3 px-4 text-gray-500 font-medium">P(Neg)</th>
+                                    <th class="text-right py-3 px-4 text-gray-500 font-medium">Sortino</th>
+                                    <th class="text-right py-3 px-4 text-gray-500 font-medium">Calmar</th>
+                                    <th class="text-right py-3 px-4 text-gray-500 font-medium">Volatility</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="s in result.summaries || []" :key="s.strategy_name + '_detail'">
+                                    <tr class="border-b hover:bg-gray-50">
+                                        <td class="py-3 px-4 font-medium" x-text="s.strategy_name"></td>
+                                        <td class="py-3 px-4 text-right" x-text="formatPercent(s.p10_cagr)"></td>
+                                        <td class="py-3 px-4 text-right" x-text="formatPercent(s.median_cagr)"></td>
+                                        <td class="py-3 px-4 text-right" x-text="formatPercent(s.p90_cagr)"></td>
+                                        <td class="py-3 px-4 text-right text-red-600" x-text="formatPercent(s.worst_cagr)"></td>
+                                        <td class="py-3 px-4 text-right text-green-600" x-text="formatPercent(s.best_cagr)"></td>
+                                        <td class="py-3 px-4 text-right" x-text="formatPercent(s.prob_negative_cagr)"></td>
+                                        <td class="py-3 px-4 text-right" x-text="s.median_sortino?.toFixed(2) || '-'"></td>
+                                        <td class="py-3 px-4 text-right" x-text="formatCalmar(s.median_calmar)"></td>
+                                        <td class="py-3 px-4 text-right" x-text="formatPercent(s.median_vol)"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Metric Definitions -->
+                <div x-data="{ defsOpen: false }" class="card">
+                    <div class="px-6 py-4 border-b cursor-pointer"
+                         @click="defsOpen = !defsOpen">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-lg font-semibold text-gray-900">Metric Definitions</h3>
+                            <svg class="w-5 h-5 text-gray-500 transform transition-transform"
+                                 :class="{ 'rotate-180': defsOpen }"
+                                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div x-show="defsOpen" x-collapse class="p-6">
+                        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <dt class="font-medium text-gray-700">Median CAGR</dt>
+                                <dd class="text-gray-500">Median compound annual growth rate across all windows.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">P10 / P90 CAGR</dt>
+                                <dd class="text-gray-500">10th and 90th percentile CAGR. P10 shows worst 10% of outcomes.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Tax Drag</dt>
+                                <dd class="text-gray-500">Percentage points of CAGR lost to taxes (Gross - Net).</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Hit Rate</dt>
+                                <dd class="text-gray-500">Percentage of windows where strategy beat the benchmark.</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">P(Neg)</dt>
+                                <dd class="text-gray-500">Probability of negative CAGR (percentage of windows with loss).</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-700">Pareto Front</dt>
+                                <dd class="text-gray-500">Strategies that are not dominated on all key metrics (CAGR, risk).</dd>
+                            </div>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div x-show="!result && !loading && !error" class="card p-12 text-center">
+                <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+                <p class="text-gray-500">Select strategies and configure window settings, then click "Run Sweep Analysis".</p>
+                <p class="text-gray-400 text-sm mt-2">Sweep analysis tests how strategies perform across many different time periods.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function sweep() {
+    return {
+        allStrategies: [
+            {% for strategy in strategies %}'{{ strategy.file_path }}'{% if not loop.last %}, {% endif %}{% endfor %}
+        ],
+        form: {
+            selected_strategies: [],
+            mode: 'rolling',
+            window_length: '10y',
+            start_grid: 'monthly',
+            step: 1,
+            from_date: '2000-01-01',
+            end_date: '',
+            initial_capital: 10000,
+            benchmark: 'SPY',
+            metric_basis: 'net_liquidation',
+            costs_pct: 0.1,
+            tax_enabled: true,
+            tax_exemption: 1000,
+            drip_enabled: false,
+            skip_failed: true,
+            execution_lag_days: 0,
+            max_volume_participation: null,
+            min_daily_dollar_volume: 0,
+            liquidity_on_missing_volume: 'allow',
+            max_position: null,
+            turnover_budget: null,
+            sector_caps_text: '',
+            ticker_sectors_text: '',
+            drawdown_brake_threshold: null,
+            drawdown_brake_cash_target: 1.0,
+            drawdown_brake_release: null,
+        },
+        loadedParams: null,
+        loading: false,
+        error: null,
+        result: null,
+        elapsedSeconds: 0,
+        elapsedTimer: null,
+        progressData: null,
+        progressInterval: null,
+        currentRunId: null,
+        cancelRequested: false,
+        sortColumn: null,
+        sortDirection: 'desc',
+
+        toggleSelectAll() {
+            if (this.form.selected_strategies.length === this.allStrategies.length) {
+                this.form.selected_strategies = [];
+            } else {
+                this.form.selected_strategies = [...this.allStrategies];
+            }
+        },
+
+        get sortedSummaries() {
+            if (!this.result?.summaries) return [];
+            if (!this.sortColumn) return this.result.summaries;
+
+            const summaries = [...this.result.summaries];
+            const col = this.sortColumn;
+            const dir = this.sortDirection === 'asc' ? 1 : -1;
+
+            return summaries.sort((a, b) => {
+                let aVal, bVal;
+
+                // Handle computed columns
+                if (col === 'net_cagr') {
+                    aVal = this.getNetCagr(a);
+                    bVal = this.getNetCagr(b);
+                } else if (col === 'tax_drag') {
+                    aVal = a.median_cagr_gross - this.getNetCagr(a);
+                    bVal = b.median_cagr_gross - this.getNetCagr(b);
+                } else if (col === 'p10_cagr') {
+                    aVal = this.getP10Cagr(a);
+                    bVal = this.getP10Cagr(b);
+                } else {
+                    aVal = a[col];
+                    bVal = b[col];
+                }
+
+                // Handle null/undefined
+                if (aVal === null || aVal === undefined) return 1;
+                if (bVal === null || bVal === undefined) return -1;
+
+                // String comparison
+                if (col === 'strategy_name') {
+                    return dir * aVal.localeCompare(bVal);
+                }
+
+                // Numeric comparison
+                return dir * (aVal - bVal);
+            });
+        },
+
+        toggleSort(column) {
+            if (this.sortColumn === column) {
+                this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sortColumn = column;
+                // Ascending for: rank, strategy_name, worst_maxdd, tax_drag (lower is better)
+                if (column === 'rank' || column === 'strategy_name' || column === 'worst_maxdd' || column === 'tax_drag') {
+                    this.sortDirection = 'asc';
+                } else {
+                    this.sortDirection = 'desc';
+                }
+            }
+        },
+
+        formatPercent(value) {
+            if (value === null || value === undefined) return '-';
+            return (value * 100).toFixed(1) + '%';
+        },
+
+        formatTaxDrag(s) {
+            const netCagr = this.getNetCagr(s);
+            const drag = (s.median_cagr_gross - netCagr) * 100;
+            return drag.toFixed(1) + 'pp';
+        },
+
+        formatCalmar(value) {
+            if (value === null || value === undefined) return '-';
+            if (Math.abs(value) > 100) return '> 100';
+            return value.toFixed(2);
+        },
+
+        getNetCagr(s) {
+            if (this.result?.metric_basis === 'net_liquidation') {
+                return s.median_cagr_net_liquidation;
+            } else if (this.result?.metric_basis === 'net_realized') {
+                return s.median_cagr_net_realized;
+            }
+            return s.median_cagr_gross;
+        },
+
+        getP10Cagr(s) {
+            if (this.result?.metric_basis === 'net_liquidation') {
+                return s.p10_cagr_net_liquidation;
+            } else if (this.result?.metric_basis === 'net_realized') {
+                return s.p10_cagr_net_realized;
+            }
+            return s.p10_cagr_gross;
+        },
+
+        get progressSummary() {
+            if (!this.progressData) return 'Initializing sweep...';
+            if (this.progressData.status === 'pending') return 'Waiting for sweep to start...';
+            if (this.progressData.status === 'cancelling') return 'Cancelling sweep...';
+            if (this.progressData.status === 'cancelled') return 'Sweep cancelled';
+            if (!this.progressData.strategy_index) {
+                if (this.progressData.status === 'loading_strategies') return 'Loading strategies...';
+                if (this.progressData.status === 'loading_data') return 'Loading price data...';
+                if (this.progressData.status === 'generating_windows') return 'Generating sweep windows...';
+                if (this.progressData.status === 'running') return 'Preparing sweep windows...';
+                return 'Initializing sweep...';
+            }
+            if (this.progressData.status === 'loading_strategies') {
+                const name = this.progressData.strategy_name || 'Preparing';
+                return `Loading strategy ${this.progressData.strategy_index}/${this.progressData.strategy_total}: ${name}`;
+            }
+            const name = this.progressData.strategy_name || 'Preparing';
+            return `Strategy ${this.progressData.strategy_index}/${this.progressData.strategy_total}: ${name}`;
+        },
+
+        get progressDetail() {
+            if (!this.progressData) return '';
+            if (!this.progressData.strategy_index) {
+                if (this.progressData.status === 'pending') {
+                    return 'Initializing request...';
+                }
+                if (this.progressData.status === 'loading_strategies') {
+                    return `Strategies: ${this.progressData.strategy_total}`;
+                }
+                if (this.progressData.status === 'loading_data') {
+                    return `Strategies: ${this.progressData.strategy_total}`;
+                }
+                if (this.progressData.status === 'generating_windows') {
+                    return 'Building window grid...';
+                }
+                if (this.progressData.status === 'running') {
+                    return `Windows: ${this.progressData.iteration_total}`;
+                }
+            }
+            if (!this.progressData.total_runs) {
+                return 'Preparing backtests...';
+            }
+            const run = `${this.progressData.run_count}/${this.progressData.total_runs}`;
+            const iter = `${this.progressData.iteration_index}/${this.progressData.iteration_total}`;
+            const eta = this.estimateEta(this.progressData.run_count, this.progressData.total_runs);
+            return `Iteration ${iter} · Overall ${run}${eta ? ` · ETA ${eta}` : ''}`;
+        },
+
+        startProgressPolling(runId) {
+            this.progressData = null;
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+            }
+            const poll = async () => {
+                try {
+                    const response = await fetch(`/api/v1/sweep/progress/${runId}`);
+                    if (!response.ok) {
+                        return;
+                    }
+                    this.progressData = await response.json();
+                } catch {
+                    // Ignore polling errors while sweep is running
+                }
+            };
+            poll();
+            this.progressInterval = setInterval(poll, 1000);
+        },
+
+        stopProgressPolling() {
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+                this.progressInterval = null;
+            }
+        },
+
+        async loadParamsFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                this.loadedParams = JSON.parse(text);
+            } catch (e) {
+                this.error = `Failed to load params file: ${e.message}`;
+                this.loadedParams = null;
+            }
+        },
+
+        async runSweep() {
+            if (this.form.selected_strategies.length === 0) {
+                this.error = 'Please select at least one strategy.';
+                return;
+            }
+
+            this.loading = true;
+            this.error = null;
+            this.result = null;
+            this.startTimer();
+            this.cancelRequested = false;
+            const runId = (crypto?.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random()}`;
+            this.currentRunId = runId;
+            this.startProgressPolling(runId);
+
+            try {
+                const sectorCaps = parseKeyValueMap(this.form.sector_caps_text, true);
+                const tickerSectors = parseKeyValueMap(this.form.ticker_sectors_text, false);
+                const response = await fetch('/api/v1/sweep', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        strategies: this.form.selected_strategies,
+                        strategy_params: this.loadedParams,
+                        run_id: runId,
+                        mode: this.form.mode,
+                        window_length: this.form.window_length,
+                        start_grid: this.form.start_grid,
+                        step: this.form.step,
+                        from_date: this.form.from_date || null,
+                        end_date: this.form.end_date || null,
+                        initial_capital: this.form.initial_capital,
+                        benchmark: this.form.benchmark,
+                        metric_basis: this.form.metric_basis,
+                        costs_pct: this.form.costs_pct / 100,
+                        tax_enabled: this.form.tax_enabled,
+                        tax_exemption: this.form.tax_exemption,
+                        drip_enabled: this.form.drip_enabled,
+                        skip_failed: this.form.skip_failed,
+                        execution_lag_days: this.form.execution_lag_days,
+                        max_volume_participation: this.form.max_volume_participation,
+                        min_daily_dollar_volume: this.form.min_daily_dollar_volume,
+                        liquidity_on_missing_volume: this.form.liquidity_on_missing_volume,
+                        max_position: this.form.max_position,
+                        turnover_budget: this.form.turnover_budget,
+                        sector_caps: sectorCaps,
+                        ticker_sectors: tickerSectors,
+                        drawdown_brake_threshold: this.form.drawdown_brake_threshold,
+                        drawdown_brake_cash_target: this.form.drawdown_brake_cash_target,
+                        drawdown_brake_release: this.form.drawdown_brake_release,
+                    })
+                });
+
+                if (!response.ok) {
+                    let errorMsg = 'Sweep analysis failed';
+                    try {
+                        const err = await response.json();
+                        if (typeof err.detail === 'string') {
+                            errorMsg = err.detail;
+                        } else if (err.detail && typeof err.detail === 'object') {
+                            errorMsg = JSON.stringify(err.detail);
+                        } else if (err.message) {
+                            errorMsg = err.message;
+                        }
+                    } catch (parseErr) {
+                        try {
+                            errorMsg = await response.text();
+                            if (errorMsg.length > 200) {
+                                errorMsg = errorMsg.substring(0, 200) + '...';
+                            }
+                        } catch {
+                            errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                        }
+                    }
+                    throw new Error(errorMsg);
+                }
+
+                this.result = await response.json();
+
+                this.$nextTick(() => this.renderCharts());
+            } catch (e) {
+                if (this.cancelRequested) {
+                    this.error = 'Sweep cancelled.';
+                } else {
+                    this.error = e.message;
+                }
+            } finally {
+                this.stopTimer();
+                this.stopProgressPolling();
+                this.loading = false;
+            }
+        },
+
+        async cancelSweep() {
+            if (!this.currentRunId) return;
+            this.cancelRequested = true;
+            try {
+                await fetch(`/api/v1/sweep/cancel/${this.currentRunId}`, { method: 'POST' });
+            } catch {
+                // Ignore cancellation errors
+            }
+        },
+
+        startTimer() {
+            this.elapsedSeconds = 0;
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+            }
+            this.elapsedTimer = setInterval(() => {
+                this.elapsedSeconds += 1;
+            }, 1000);
+        },
+
+        stopTimer() {
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+                this.elapsedTimer = null;
+            }
+        },
+
+        estimateEta(completed, total) {
+            const elapsed = this.elapsedSeconds;
+            if (!elapsed || !completed || !total || completed <= 0 || total <= 0 || completed >= total) {
+                return '';
+            }
+            const remaining = Math.ceil((elapsed * (total - completed)) / completed);
+            return formatDuration(remaining);
+        },
+
+        renderCharts() {
+            if (!this.result?.summaries) return;
+
+            const summaries = this.result.summaries;
+
+            // CAGR Box Plot
+            const cagrTraces = summaries.map((s, i) => ({
+                type: 'box',
+                name: s.strategy_name.substring(0, 25),
+                y: [s.worst_cagr * 100, s.p10_cagr * 100, s.median_cagr * 100, s.p90_cagr * 100, s.best_cagr * 100],
+                boxpoints: false,
+                marker: { color: s.pareto_front ? '#7c3aed' : '#6b7280' },
+            }));
+
+            Plotly.newPlot('cagr-chart', cagrTraces, getPlotlyLayout({
+                yaxis: { title: 'CAGR (%)', ticksuffix: '%' },
+                showlegend: false,
+                margin: { t: 20, r: 20, b: 80, l: 60 },
+            }), { responsive: true });
+
+            // MaxDD Bar Chart
+            const maxddData = [{
+                type: 'bar',
+                x: summaries.map(s => s.strategy_name.substring(0, 25)),
+                y: summaries.map(s => s.worst_maxdd * 100),
+                marker: {
+                    color: summaries.map(s => s.pareto_front ? '#7c3aed' : '#dc2626'),
+                },
+            }];
+
+            Plotly.newPlot('maxdd-chart', maxddData, getPlotlyLayout({
+                yaxis: { title: 'Worst Max Drawdown (%)', ticksuffix: '%' },
+                showlegend: false,
+                margin: { t: 20, r: 20, b: 100, l: 60 },
+                xaxis: { tickangle: -45 },
+            }), { responsive: true });
+        },
+    }
+}
+</script>
+{% endblock %}
