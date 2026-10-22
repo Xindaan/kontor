@@ -1,0 +1,1241 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="signalsPage()" x-init="init()" class="space-y-6">
+    <div class="card">
+        <div class="px-6 py-4 border-b">
+            <h1 class="text-xl font-semibold text-gray-900">Live Trading Signals</h1>
+            <p class="text-sm text-gray-600 mt-1">Generate a daily signal, order proposal, and target/actual drift reconciliation.</p>
+        </div>
+        <div class="p-6 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Strategy</label>
+                    <select x-model="form.strategy" @change="resetMetaCandidateDraft(); resetMetaBootstrapDraft()"
+                            class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                        {% for strategy in strategies %}
+                        <option value="{{ strategy.file_path }}">{{ strategy.name }} ({{ strategy.file_name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Signal Date (optional)</label>
+                    <input type="date" x-model="form.signal_date"
+                           class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Rebalance Frequency (optional)</label>
+                    <select x-model="form.rebalance_frequency"
+                            class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Use strategy default</option>
+                        <option value="daily">daily</option>
+                        <option value="weekly">weekly</option>
+                        <option value="monthly">monthly</option>
+                        <option value="quarterly">quarterly</option>
+                        <option value="yearly">yearly</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Drift Tolerance</label>
+                    <input type="number" step="0.001" min="0" x-model.number="form.drift_tolerance"
+                           class="w-full border rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Strategy Params (JSON)</label>
+                <textarea x-model="form.params_json" rows="4"
+                          class="w-full border rounded-md px-3 py-2 font-mono text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-sm font-medium text-gray-700">Portfolio (JSON, optional)</label>
+                    <label class="flex items-center text-sm text-gray-700">
+                        <input type="checkbox" x-model="usePortfolio"
+                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                        Include portfolio context
+                    </label>
+                </div>
+                <textarea x-model="form.portfolio_json" :disabled="!usePortfolio" rows="6"
+                          class="w-full border rounded-md px-3 py-2 font-mono text-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"></textarea>
+            </div>
+
+            <div class="border rounded-md bg-gray-50 p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-900">Exposure Policy</h3>
+                        <p class="text-xs text-gray-600 mt-1">Optional: the 3x signal stays the raw signal; execution may de-lever to 1x/core on a shock.</p>
+                    </div>
+                    <label class="flex items-center text-sm text-gray-700">
+                        <input type="checkbox" x-model="form.exposure_policy_enabled"
+                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                        Enable
+                    </label>
+                </div>
+                <div x-show="form.exposure_policy_enabled" x-cloak class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Profile</label>
+                        <select x-model="form.exposure_policy_profile"
+                                class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="trade_republic">Trade Republic</option>
+                            <option value="maxblue">Maxblue</option>
+                            <option value="us">US</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Core/Safe Asset</label>
+                        <input type="text" x-model="form.exposure_policy_core_asset"
+                               class="w-full border rounded-md px-2 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="A0YEDG">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">5d 3x Shock</label>
+                        <input type="number" step="0.01" x-model.number="form.exposure_level1_ret_5d_floor"
+                               class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">21d 3x DD Shock</label>
+                        <input type="number" step="0.01" x-model.number="form.exposure_level1_drawdown_21d_floor"
+                               class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+            </div>
+
+            <div class="border rounded-md bg-gray-50" x-data="{ metaOpen: true }">
+                <button type="button" @click="metaOpen = !metaOpen" class="collapsible-trigger w-full px-4 py-3 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <h3 class="text-sm font-semibold text-gray-900">Meta Decision & Evidence</h3>
+                        <span class="text-xs px-2 py-0.5 rounded-full" :class="form.meta_enabled ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'" x-text="form.meta_enabled ? 'Active' : 'Off'"></span>
+                    </div>
+                    <svg class="collapsible-arrow w-4 h-4 text-gray-500" :class="metaOpen && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+
+                <div x-show="metaOpen" x-collapse x-cloak class="px-4 pb-4 space-y-3">
+                    <div class="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-gray-700 space-y-2">
+                        <div class="font-semibold text-gray-900">Workflow right here</div>
+                        <div>1. In the Strategy dropdown above, select the strategy you are actually currently holding.</div>
+                        <div>2. Under Candidates, add only the real alternatives that a switch should be checked against.</div>
+                        <div>3. Run Signals and only switch in the report when <code>switch_allowed=true</code> and the evidence is <code>PASS</code>.</div>
+                        <details class="rounded border border-blue-200 bg-white p-2">
+                            <summary class="cursor-pointer font-medium text-gray-900">When do I use Meta Decision vs. Meta Bootstrap?</summary>
+                            <div class="mt-2 space-y-1">
+                                <div><code>Meta Bootstrap</code> answers the starting question: which strategy do I start with, neutrally?</div>
+                                <div><code>Meta Decision</code> answers the follow-up question: am I allowed to switch away from my current strategy today?</div>
+                                <div>Recommended defaults are already active here: hard evidence, profile <code>ausgewogen</code>, regime mode <code>strategy_fragility</code>, fail action <code>hold_current</code>.</div>
+                            </div>
+                        </details>
+                    </div>
+                    <label class="flex items-center text-sm text-gray-700">
+                        <input type="checkbox" x-model="form.meta_enabled"
+                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                        Enable Meta Decision
+                    </label>
+
+                <div x-show="form.meta_enabled" x-cloak class="space-y-3">
+                    <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Candidates</label>
+                        <p class="text-xs text-gray-600">
+                            Expected JSON: an array of strings or objects with <code>strategy</code> and optional <code>params</code>.
+                        </p>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div class="md:col-span-2">
+                                <label class="block text-xs font-medium text-gray-700 mb-1">Add Candidate (Strategy)</label>
+                                <select x-model="form.meta_candidate_strategy"
+                                        class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="">Select strategy...</option>
+                                    <template x-for="item in strategyCatalog" :key="item.file_path">
+                                        <option :value="item.file_path" x-text="item.name + ' (' + item.file_name + ')'"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700 mb-1">Candidate Params (JSON object)</label>
+                                <input type="text" x-model="form.meta_candidate_params_json"
+                                       class="w-full border rounded-md px-2 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                                       placeholder='{"lookback": 126}'>
+                            </div>
+                            <div class="flex items-end gap-2">
+                                <button @click="addMetaCandidate"
+                                        class="w-full px-2 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">
+                                    Add/Update
+                                </button>
+                            </div>
+                        </div>
+                        <textarea x-model="form.meta_candidates_json" rows="5"
+                                  class="w-full border rounded-md px-3 py-2 font-mono text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                        <div class="flex items-center justify-between text-xs text-gray-600">
+                            <span>Example: <code>[{"strategy":".../sticky_winner.py","params":{"momentum_floor":0.0}}]</code></span>
+                            <button @click="clearMetaCandidates"
+                                    class="px-2 py-1 border rounded hover:bg-gray-100 text-xs">
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Params Source</label>
+                            <select x-model="form.meta_params_source"
+                                    class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="preset_first">preset_first</option>
+                                <option value="strategy_defaults">strategy_defaults</option>
+                                <option value="manual_only">manual_only</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Scoring</label>
+                            <select x-model="form.meta_scoring_mode"
+                                    class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="hybrid">hybrid</option>
+                                <option value="performance_only">performance_only</option>
+                                <option value="gate_only">gate_only</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Decision Cadence</label>
+                            <select x-model="form.meta_decision_cadence"
+                                    class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="run_check_rebalance_switch">run_check_rebalance_switch</option>
+                                <option value="immediate">immediate</option>
+                                <option value="monthly_fixed">monthly_fixed</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Confirm Points</label>
+                            <input type="number" min="1" step="1" x-model.number="form.meta_confirm_points"
+                                   class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Switch Margin</label>
+                            <input type="number" min="0" step="0.01" x-model.number="form.meta_switch_margin"
+                                   class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Plan Mode</label>
+                            <select x-model="form.meta_plan_mode"
+                                    class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="recommendation_only">recommendation_only</option>
+                                <option value="recommendation_with_portfolio_plan">recommendation_with_portfolio_plan</option>
+                                <option value="always_plan">always_plan</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Evidence Profile</label>
+                            <select x-model="form.meta_evidence_profile"
+                                    class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="ausgewogen">ausgewogen</option>
+                                <option value="defensiv">defensiv</option>
+                                <option value="aggressiv">aggressiv</option>
+                                <option value="custom">custom</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Regime Mode</label>
+                            <select x-model="form.meta_regime_mode"
+                                    class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="strategy_fragility">strategy_fragility</option>
+                                <option value="none">none</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Regime Profile</label>
+                            <select x-model="form.meta_regime_profile"
+                                    class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="ausgewogen">ausgewogen</option>
+                                <option value="defensiv">defensiv</option>
+                                <option value="aggressiv">aggressiv</option>
+                                <option value="custom">custom</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Evidence Max Age (days)</label>
+                            <input type="number" min="1" step="1" x-model.number="form.meta_evidence_max_age_days"
+                                   class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Gate Fail Action</label>
+                            <select x-model="form.meta_gate_fail_action"
+                                    class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="hold_current">hold_current</option>
+                                <option value="manual_override">manual_override</option>
+                                <option value="fallback_safe">fallback_safe</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Alpha Tie Band</label>
+                            <input type="number" min="0" step="0.01" x-model.number="form.meta_alpha_tie_band"
+                                   class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Stress Alpha Tolerance</label>
+                            <input type="number" min="0" step="0.01" x-model.number="form.meta_stress_alpha_tolerance"
+                                   class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Conditioned Min Windows</label>
+                            <input type="number" min="1" step="1" x-model.number="form.meta_conditioned_min_windows"
+                                   class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+
+                    <label class="flex items-center text-sm text-gray-700">
+                        <input type="checkbox" x-model="form.meta_evidence_required"
+                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                        Evidence required (hard gate)
+                    </label>
+
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Evidence Artifact Path (optional)</label>
+                        <input type="text" x-model="form.meta_evidence_artifact_path"
+                               class="w-full border rounded-md px-2 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <div class="border rounded-md p-3 bg-white space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-sm font-semibold text-gray-900">Meta Tuning (2-Stage Smart)</h4>
+                            <label class="flex items-center text-xs text-gray-700">
+                                <input type="checkbox" x-model="form.meta_tuning_enabled"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                                Enable
+                            </label>
+                        </div>
+                        <div x-show="form.meta_tuning_enabled" x-cloak class="space-y-3">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">Preset</label>
+                                    <select x-model="form.meta_tuning_preset"
+                                            class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="quick">quick</option>
+                                        <option value="balanced">balanced</option>
+                                        <option value="thorough">thorough</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">Max Combos</label>
+                                    <input type="number" min="1" max="500" step="1" x-model.number="form.meta_tuning_max_combinations"
+                                           class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">Top-K Stage 2</label>
+                                    <input type="number" min="1" max="100" step="1" x-model.number="form.meta_tuning_top_k"
+                                           class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">Train Years</label>
+                                    <input type="number" min="0.25" step="0.25" x-model.number="form.meta_tuning_train_years"
+                                           class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">Test Years</label>
+                                    <input type="number" min="0.25" step="0.25" x-model.number="form.meta_tuning_test_years"
+                                           class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">Step Months</label>
+                                    <input type="number" min="1" step="1" x-model.number="form.meta_tuning_step_months"
+                                           class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <label class="flex items-center text-xs text-gray-700">
+                                    <input type="checkbox" x-model="form.meta_tuning_anchored"
+                                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                                    Anchored windows
+                                </label>
+                                <button @click="runMetaEvidenceTune" :disabled="metaTuneLoading"
+                                        class="px-3 py-1.5 bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 text-sm">
+                                    Run Meta Tune
+                                </button>
+                            </div>
+                            <div x-show="metaTuneError" x-cloak class="text-xs text-red-700" x-text="metaTuneError"></div>
+                            <div x-show="metaTuneResult" x-cloak class="text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded p-2">
+                                <div class="font-semibold mb-1">Best Setup</div>
+                                <div x-text="'confirm_points=' + (metaTuneResult?.best_setup?.confirm_points ?? '-') + ', switch_margin=' + (metaTuneResult?.best_setup?.switch_margin ?? '-')"></div>
+                                <div x-text="'Stage2 score=' + formatNumber(metaTuneResult?.best_setup?.stage2_score)"></div>
+                                <div x-text="'Combos: ' + (metaTuneResult?.capped_combinations ?? 0) + '/' + (metaTuneResult?.total_combinations ?? 0)"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <div class="border rounded-md p-4 bg-blue-50 border-blue-200 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-gray-900">Meta Bootstrap (Starting Choice)</h3>
+                    <button @click="runMetaBootstrap" :disabled="metaBootstrapLoading"
+                            class="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm">
+                        Run Start Decision
+                    </button>
+                </div>
+                <p class="text-xs text-gray-600">
+                    Compares both directions (A->B, B->A) and provides a neutral starting recommendation with evidence + fallback rule.
+                </p>
+                <details class="rounded-md border border-blue-200 bg-white p-3 text-xs text-gray-700">
+                    <summary class="cursor-pointer font-medium text-gray-900">Workflow / When do I use this?</summary>
+                    <div class="mt-2 space-y-1">
+                        <div>1. Select two strategies you want to decide between initially.</div>
+                        <div>2. If a strategy has a short history, shorten the bootstrap windows below.</div>
+                        <div>3. Click Run Start Decision and adopt the recommended starting strategy.</div>
+                        <div>4. After that, only check ongoing switches against the currently held strategy in the Meta Decision block above.</div>
+                    </div>
+                </details>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Strategy A</label>
+                        <select x-model="form.meta_bootstrap_strategy_a"
+                                class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Select strategy...</option>
+                            <template x-for="item in strategyCatalog" :key="'boot-a-' + item.file_path">
+                                <option :value="item.file_path" x-text="item.name + ' (' + item.file_name + ')'"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Strategy B</label>
+                        <select x-model="form.meta_bootstrap_strategy_b"
+                                class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Select strategy...</option>
+                            <template x-for="item in strategyCatalog" :key="'boot-b-' + item.file_path">
+                                <option :value="item.file_path" x-text="item.name + ' (' + item.file_name + ')'"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+                <div class="rounded-md border border-blue-200 bg-white p-3 space-y-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <div class="text-xs font-medium text-gray-900">Bootstrap Window</div>
+                            <div class="text-xs text-gray-600">Default for long histories: 5Y train / 1Y test / 12M step. Shorter for Maxblue or newer products.</div>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button"
+                                    @click="applyMetaBootstrapPreset('standard')"
+                                    class="px-2 py-1 border rounded text-xs hover:bg-gray-50">
+                                Standard
+                            </button>
+                            <button type="button"
+                                    @click="applyMetaBootstrapPreset('short_history')"
+                                    class="px-2 py-1 border rounded text-xs hover:bg-gray-50">
+                                Short History / Maxblue
+                            </button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Train Years</label>
+                            <input type="number" min="0.25" step="0.25" x-model.number="form.meta_bootstrap_train_years"
+                                   class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Test Years</label>
+                            <input type="number" min="0.25" step="0.25" x-model.number="form.meta_bootstrap_test_years"
+                                   class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Step Months</label>
+                            <input type="number" min="1" step="1" x-model.number="form.meta_bootstrap_step_months"
+                                   class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div class="flex items-end">
+                            <label class="flex items-center text-xs text-gray-700">
+                                <input type="checkbox" x-model="form.meta_bootstrap_anchored"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                                Anchored windows
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Strategy A Params (JSON object)</label>
+                        <input type="text" x-model="form.meta_bootstrap_strategy_a_params_json"
+                               class="w-full border rounded-md px-2 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                               placeholder='{"safe_asset":"SPY"}'>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Strategy B Params (JSON object)</label>
+                        <input type="text" x-model="form.meta_bootstrap_strategy_b_params_json"
+                               class="w-full border rounded-md px-2 py-2 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                               placeholder='{"safe_asset":"SPY"}'>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Fallback CAGR Tie-Band (pp)</label>
+                        <input type="number" min="0" step="0.1" x-model.number="form.meta_bootstrap_fallback_cagr_tie_band_pp"
+                               class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Fallback Tie-Breaker</label>
+                        <select x-model="form.meta_bootstrap_fallback_tie_breaker"
+                                class="w-full border rounded-md px-2 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="maxdd">maxdd</option>
+                            <option value="sharpe">sharpe</option>
+                        </select>
+                    </div>
+                </div>
+                <div x-show="metaBootstrapError" x-cloak class="text-xs text-red-700" x-text="metaBootstrapError"></div>
+                <div x-show="metaBootstrapResult" x-cloak class="text-sm bg-white border rounded p-3 space-y-2">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <div class="text-xs text-gray-500">Recommended Start</div>
+                            <div class="font-medium break-all" x-text="metaBootstrapResult?.decision?.recommended_start_strategy || '-'"></div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-gray-500">Decision Rule</div>
+                            <div class="font-medium" x-text="metaBootstrapResult?.decision?.decision_rule || '-'"></div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-gray-500">Artifact</div>
+                            <div class="font-mono text-xs break-all" x-text="metaBootstrapResult?.artifact_id || '-'"></div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-700">
+                        <div class="border rounded p-2 bg-gray-50">
+                            <div class="font-semibold mb-1">A -> B</div>
+                            <div x-text="'pass=' + (metaBootstrapResult?.evidence?.a_to_b?.pass ? 'yes' : 'no')"></div>
+                            <div x-text="'edge=' + formatNumber(metaBootstrapResult?.evidence?.a_to_b?.oos_cagr_edge_pp) + 'pp'"></div>
+                            <div x-text="'hit=' + formatPercent(metaBootstrapResult?.evidence?.a_to_b?.oos_hit_rate)"></div>
+                        </div>
+                        <div class="border rounded p-2 bg-gray-50">
+                            <div class="font-semibold mb-1">B -> A</div>
+                            <div x-text="'pass=' + (metaBootstrapResult?.evidence?.b_to_a?.pass ? 'yes' : 'no')"></div>
+                            <div x-text="'edge=' + formatNumber(metaBootstrapResult?.evidence?.b_to_a?.oos_cagr_edge_pp) + 'pp'"></div>
+                            <div x-text="'hit=' + formatPercent(metaBootstrapResult?.evidence?.b_to_a?.oos_hit_rate)"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <label class="flex items-center text-sm text-gray-700">
+                    <input type="checkbox" x-model="form.skip_failed"
+                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                    Skip failed ticker downloads
+                </label>
+                <button @click="runSignals" :disabled="loading"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                    Generate Signals
+                </button>
+            </div>
+
+            <div x-show="error" x-cloak class="bg-red-50 border border-red-200 text-red-700 rounded-md p-3 text-sm" x-text="error"></div>
+        </div>
+    </div>
+
+    <div x-show="report" x-cloak class="card">
+        <div class="px-6 py-4 border-b">
+            <h2 class="text-lg font-semibold text-gray-900">Signal Report</h2>
+            <p class="text-sm text-gray-600 mt-1">
+                <span x-text="report?.strategy_name"></span>
+                <span x-text="' | ' + report?.as_of"></span>
+            </p>
+        </div>
+        <div class="p-6 space-y-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-gray-50 rounded-md p-3">
+                    <div class="text-xs text-gray-500">Signals</div>
+                    <div class="text-sm font-semibold flex items-center gap-2 mt-1">
+                        <span class="badge badge--buy"><span x-text="report?.summary?.buys || 0"></span> BUY</span>
+                        <span class="badge badge--sell"><span x-text="report?.summary?.sells || 0"></span> SELL</span>
+                        <span class="badge" style="background:var(--bg-card-hover);color:var(--text-secondary)"><span x-text="report?.summary?.holds || 0"></span> HOLD</span>
+                    </div>
+                </div>
+                <div class="bg-gray-50 rounded-md p-3">
+                    <div class="text-xs text-gray-500">Actionable Orders</div>
+                    <div class="text-lg font-semibold font-mono" x-text="report?.summary?.orders?.actionable || 0"></div>
+                </div>
+                <div class="bg-gray-50 rounded-md p-3">
+                    <div class="text-xs text-gray-500">Drift Outliers</div>
+                    <div class="text-lg font-semibold font-mono" x-text="report?.summary?.drift?.out_of_tolerance || 0"></div>
+                </div>
+                <div class="bg-gray-50 rounded-md p-3">
+                    <div class="text-xs text-gray-500">Portfolio Value</div>
+                    <div class="text-lg font-semibold font-mono" x-text="formatMoney(report?.portfolio_value)"></div>
+                </div>
+            </div>
+
+            <div x-show="report?.exposure_policy" x-cloak class="border rounded-md p-4 bg-sky-50 border-sky-200 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-medium text-gray-900">Exposure Policy</h3>
+                    <span class="px-2 py-1 text-xs rounded-full font-medium bg-sky-100 text-sky-700"
+                          x-text="(report?.exposure_policy?.exposure_state || '-').toUpperCase()"></span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                    <div>
+                        <div class="text-xs text-gray-500">Raw Signal</div>
+                        <div class="font-mono text-xs break-all" x-text="JSON.stringify(report?.exposure_policy?.raw_strategy_target || {})"></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">Adjusted Target</div>
+                        <div class="font-mono text-xs break-all" x-text="JSON.stringify(report?.exposure_policy?.policy_adjusted_target || {})"></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">Execution Asset</div>
+                        <div class="font-medium" x-text="(report?.exposure_policy?.raw_signal_asset || '-') + ' -> ' + (report?.exposure_policy?.execution_asset || '-')"></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">Fallback Reason</div>
+                        <div class="font-medium" x-text="report?.exposure_policy?.fallback_reason || '-'"></div>
+                    </div>
+                </div>
+                <div x-show="(report?.exposure_policy?.guard_checks || []).length > 0" x-cloak class="overflow-x-auto">
+                    <table class="min-w-full text-sm bg-white border rounded-md">
+                        <thead class="text-left border-b bg-gray-50">
+                            <tr>
+                                <th class="py-2 px-3">Check</th>
+                                <th class="py-2 px-3">Status</th>
+                                <th class="py-2 px-3">Detail</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(check, idx) in (report?.exposure_policy?.guard_checks || [])" :key="'exp-check-' + idx">
+                                <tr class="border-b last:border-b-0">
+                                    <td class="py-2 px-3 font-medium" x-text="check.label || check.key"></td>
+                                    <td class="py-2 px-3">
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium"
+                                              :class="check.status === 'triggered' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'"
+                                              x-text="String(check.status || '-').toUpperCase()"></span>
+                                    </td>
+                                    <td class="py-2 px-3 text-gray-600" x-text="check.detail"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div x-show="report?.meta_decision" x-cloak class="border rounded-md p-4 bg-amber-50 border-amber-200 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-medium text-gray-900">Meta Decision</h3>
+                    <span class="px-2 py-1 text-xs rounded-full font-medium"
+                          :class="evidenceStatusClass(report?.meta_decision?.evidence_status)"
+                          x-text="(report?.meta_decision?.evidence_status || '-').toUpperCase()"></span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                    <div>
+                        <div class="text-xs text-gray-500">Current</div>
+                        <div class="font-medium break-all" x-text="report?.meta_decision?.current_strategy"></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">Recommended</div>
+                        <div class="font-medium break-all" x-text="report?.meta_decision?.recommended_target"></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">Score Margin</div>
+                        <div class="font-medium" x-text="formatNumber(report?.meta_decision?.score_margin)"></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">Action</div>
+                        <div class="font-medium" x-text="report?.meta_decision?.executed_action"></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                    <div>
+                        <div class="text-xs text-gray-500">Decision Rule</div>
+                        <div class="font-medium" x-text="report?.meta_decision?.decision_rule || '-'"></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">Performance Gap</div>
+                        <div class="font-medium" x-text="formatNumber(report?.meta_decision?.performance_gap)"></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">Current Bucket</div>
+                        <div class="font-medium" x-text="report?.meta_decision?.current_regime_bucket || '-'"></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">Target Bucket</div>
+                        <div class="font-medium" x-text="report?.meta_decision?.target_regime_bucket || '-'"></div>
+                    </div>
+                </div>
+                <div class="text-sm">
+                    <span class="font-medium">Switch Allowed:</span>
+                    <span x-text="report?.meta_decision?.switch_allowed ? 'yes' : 'no'"></span>
+                </div>
+                <div x-show="(report?.meta_decision?.switch_checks || []).length > 0" x-cloak class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div class="font-medium text-sm">Switch Checks</div>
+                        <div class="text-xs text-gray-600" x-show="(report?.meta_decision?.blocked_checks || []).length > 0"
+                             x-text="'Blocker: ' + (report?.meta_decision?.blocked_checks || []).join(', ')"></div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm bg-white border rounded-md">
+                            <thead class="text-left border-b bg-gray-50">
+                                <tr>
+                                    <th class="py-2 px-3">Gate</th>
+                                    <th class="py-2 px-3">Status</th>
+                                    <th class="py-2 px-3">Detail</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="(check, idx) in (report?.meta_decision?.switch_checks || [])" :key="'check-' + idx">
+                                    <tr class="border-b last:border-b-0">
+                                        <td class="py-2 px-3 font-medium" x-text="check.label"></td>
+                                        <td class="py-2 px-3">
+                                            <span class="px-2 py-1 rounded-full text-xs font-medium"
+                                                  :class="switchCheckClass(check.status)"
+                                                  x-text="String(check.status || '-').toUpperCase()"></span>
+                                        </td>
+                                        <td class="py-2 px-3 text-gray-600">
+                                            <div x-text="check.detail"></div>
+                                            <div x-show="check.next_step" x-cloak class="text-xs text-amber-700 mt-1"
+                                                 x-text="'Needs next: ' + check.next_step"></div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="text-sm" x-show="report?.meta_decision?.conditioned_evidence_status">
+                    <span class="font-medium">Conditioned Evidence:</span>
+                    <span x-text="(report?.meta_decision?.conditioned_evidence_status || '-').toUpperCase()"></span>
+                    <span class="text-gray-500" x-text="'(' + (report?.meta_decision?.conditioned_windows ?? '-') + ' windows)'"></span>
+                </div>
+                <div class="text-sm" x-show="report?.meta_decision?.evidence_artifact_id">
+                    <span class="font-medium">Evidence Artifact:</span>
+                    <span class="font-mono text-xs break-all" x-text="report?.meta_decision?.evidence_artifact_id"></span>
+                </div>
+                <div class="text-sm" x-show="(report?.meta_decision?.current_regime_reasons || []).length > 0 || (report?.meta_decision?.target_regime_reasons || []).length > 0">
+                    <div class="font-medium mb-1">Regime Reasons</div>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <template x-for="(reason, idx) in (report?.meta_decision?.current_regime_reasons || [])" :key="'cr-' + idx">
+                            <li x-text="'current: ' + reason"></li>
+                        </template>
+                        <template x-for="(reason, idx) in (report?.meta_decision?.target_regime_reasons || [])" :key="'tr-' + idx">
+                            <li x-text="'target: ' + reason"></li>
+                        </template>
+                    </ul>
+                </div>
+                <div class="text-sm" x-show="(report?.meta_decision?.evidence_reasons || []).length > 0 || (report?.meta_decision?.live_reasons || []).length > 0">
+                    <div class="font-medium mb-1">Reasons</div>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <template x-for="(reason, idx) in (report?.meta_decision?.live_reasons || [])" :key="'l-' + idx">
+                            <li x-text="reason"></li>
+                        </template>
+                        <template x-for="(reason, idx) in (report?.meta_decision?.evidence_reasons || [])" :key="'e-' + idx">
+                            <li x-text="reason"></li>
+                        </template>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto scroll-shadow">
+                <h3 class="font-medium text-gray-900 mb-2">Order Proposals</h3>
+                <table class="min-w-full text-sm">
+                    <thead class="text-left border-b">
+                        <tr>
+                            <th class="py-2 pr-4">Ticker</th>
+                            <th class="py-2 pr-4">Action</th>
+                            <th class="py-2 pr-4">Shares Delta</th>
+                            <th class="py-2 pr-4">Value Delta</th>
+                            <th class="py-2 pr-4">Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="row in (report?.orders || [])" :key="row.ticker + '-' + row.action">
+                            <tr class="border-b hover:bg-gray-50">
+                                <td class="py-2 pr-4 font-medium" x-text="row.ticker"></td>
+                                <td class="py-2 pr-4">
+                                    <span class="badge" :class="row.action === 'BUY' ? 'badge--buy' : row.action === 'SELL' ? 'badge--sell' : ''" x-text="row.action"></span>
+                                </td>
+                                <td class="py-2 pr-4 font-mono" x-text="formatNumber(row.shares_delta)"></td>
+                                <td class="py-2 pr-4 font-mono" x-text="formatMoneySigned(row.value_delta)"></td>
+                                <td class="py-2 pr-4 text-gray-500" x-text="row.reason"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="(report?.orders || []).length === 0">
+                            <td colspan="5" class="py-3 text-gray-500">No orders.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="overflow-x-auto scroll-shadow">
+                <h3 class="font-medium text-gray-900 mb-2">Drift Reconciliation</h3>
+                <table class="min-w-full text-sm">
+                    <thead class="text-left border-b">
+                        <tr>
+                            <th class="py-2 pr-4">Ticker</th>
+                            <th class="py-2 pr-4">Current %</th>
+                            <th class="py-2 pr-4">Target %</th>
+                            <th class="py-2 pr-4">Drift bps</th>
+                            <th class="py-2 pr-4">In Tolerance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="row in (report?.drift_reconciliation?.positions || [])" :key="row.ticker">
+                            <tr class="border-b hover:bg-gray-50">
+                                <td class="py-2 pr-4 font-medium" x-text="row.ticker"></td>
+                                <td class="py-2 pr-4 font-mono" x-text="formatPercent(row.current_weight)"></td>
+                                <td class="py-2 pr-4 font-mono" x-text="formatPercent(row.target_weight)"></td>
+                                <td class="py-2 pr-4 font-mono" x-text="formatNumber(row.drift_bps)"></td>
+                                <td class="py-2 pr-4" :class="row.in_tolerance ? 'text-green-600' : 'text-red-600'" x-text="row.in_tolerance ? 'yes' : 'no'"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="(report?.drift_reconciliation?.positions || []).length === 0">
+                            <td colspan="5" class="py-3 text-gray-500">No drift rows.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function signalsPage() {
+    return {
+        strategyCatalog: {{ strategies | tojson }},
+        loading: false,
+        metaTuneLoading: false,
+        metaBootstrapLoading: false,
+        error: "",
+        metaTuneError: "",
+        metaBootstrapError: "",
+        report: null,
+        metaTuneResult: null,
+        metaBootstrapResult: null,
+        usePortfolio: true,
+        form: {
+            strategy: "{{ strategies[0].file_path if strategies else '' }}",
+            signal_date: "",
+            rebalance_frequency: "",
+            drift_tolerance: 0.005,
+            skip_failed: true,
+            params_json: "{}",
+            portfolio_json: '{\n  "positions": {},\n  "cash": 10000.0,\n  "last_rebalance": null\n}',
+            exposure_policy_enabled: false,
+            exposure_policy_profile: "trade_republic",
+            exposure_policy_core_asset: "A0YEDG",
+            exposure_level1_ret_5d_floor: -0.12,
+            exposure_level1_drawdown_21d_floor: -0.25,
+            meta_enabled: true,
+            meta_candidates_json: "[]",
+            meta_candidate_strategy: "",
+            meta_candidate_params_json: "{}",
+            meta_params_source: "preset_first",
+            meta_scoring_mode: "hybrid",
+            meta_confirm_points: 2,
+            meta_switch_margin: 0.10,
+            meta_decision_cadence: "run_check_rebalance_switch",
+            meta_plan_mode: "recommendation_with_portfolio_plan",
+            meta_evidence_required: true,
+            meta_evidence_profile: "ausgewogen",
+            meta_regime_mode: "strategy_fragility",
+            meta_regime_profile: "ausgewogen",
+            meta_evidence_max_age_days: 30,
+            meta_gate_fail_action: "hold_current",
+            meta_alpha_tie_band: 0.03,
+            meta_stress_alpha_tolerance: 0.05,
+            meta_conditioned_min_windows: 4,
+            meta_evidence_artifact_path: "",
+            meta_tuning_enabled: false,
+            meta_tuning_preset: "balanced",
+            meta_tuning_max_combinations: 120,
+            meta_tuning_top_k: 10,
+            meta_tuning_train_years: 5.0,
+            meta_tuning_test_years: 1.0,
+            meta_tuning_step_months: 12,
+            meta_tuning_anchored: false,
+            meta_bootstrap_strategy_a: "",
+            meta_bootstrap_strategy_b: "",
+            meta_bootstrap_strategy_a_params_json: "{}",
+            meta_bootstrap_strategy_b_params_json: "{}",
+            meta_bootstrap_train_years: 5.0,
+            meta_bootstrap_test_years: 1.0,
+            meta_bootstrap_step_months: 12,
+            meta_bootstrap_anchored: false,
+            meta_bootstrap_fallback_cagr_tie_band_pp: 1.0,
+            meta_bootstrap_fallback_tie_breaker: "maxdd",
+        },
+
+        init() {
+            this.resetMetaCandidateDraft();
+            this.resetMetaBootstrapDraft();
+        },
+
+        resetMetaCandidateDraft() {
+            const fallback =
+                this.strategyCatalog.find((item) => item.file_path !== this.form.strategy) ||
+                this.strategyCatalog[0] ||
+                null;
+            this.form.meta_candidate_strategy = fallback ? fallback.file_path : "";
+            this.form.meta_candidate_params_json = "{}";
+        },
+
+        resetMetaBootstrapDraft() {
+            const fallback =
+                this.strategyCatalog.find((item) => item.file_path !== this.form.strategy) ||
+                this.strategyCatalog[0] ||
+                null;
+            this.form.meta_bootstrap_strategy_a = this.form.strategy || (this.strategyCatalog[0]?.file_path || "");
+            this.form.meta_bootstrap_strategy_b = fallback ? fallback.file_path : "";
+            this.form.meta_bootstrap_strategy_a_params_json = "{}";
+            this.form.meta_bootstrap_strategy_b_params_json = "{}";
+        },
+
+        parseJsonObject(rawValue, label) {
+            let parsed = {};
+            try {
+                parsed = rawValue ? JSON.parse(rawValue) : {};
+            } catch (err) {
+                throw new Error(`${label} is invalid JSON: ${err.message}`);
+            }
+            if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+                throw new Error(`${label} must be a JSON object`);
+            }
+            return parsed;
+        },
+
+        parseMetaCandidates() {
+            let parsed = [];
+            try {
+                parsed = this.form.meta_candidates_json ? JSON.parse(this.form.meta_candidates_json) : [];
+            } catch (err) {
+                throw new Error(`Candidates JSON is invalid: ${err.message}`);
+            }
+            if (!Array.isArray(parsed)) {
+                throw new Error("Candidates JSON must be an array");
+            }
+            return parsed.map((item, index) => {
+                if (typeof item === "string") {
+                    const normalized = item.trim();
+                    if (!normalized) {
+                        throw new Error(`Candidate #${index + 1}: strategy path must not be empty`);
+                    }
+                    return {strategy: normalized, params: {}};
+                }
+                if (item && typeof item === "object" && item.strategy) {
+                    const normalized = String(item.strategy).trim();
+                    if (!normalized) {
+                        throw new Error(`Candidate #${index + 1}: strategy path must not be empty`);
+                    }
+                    if (item.params !== undefined && (Array.isArray(item.params) || typeof item.params !== "object")) {
+                        throw new Error(`Candidate #${index + 1}: params must be a JSON object`);
+                    }
+                    return {strategy: normalized, params: item.params || {}};
+                }
+                throw new Error(`Candidate #${index + 1}: expected a string or an object with a "strategy" field`);
+            });
+        },
+
+        addMetaCandidate() {
+            this.error = "";
+            const strategy = String(this.form.meta_candidate_strategy || "").trim();
+            if (!strategy) {
+                this.error = "Please select a strategy in the Candidate dropdown first";
+                return;
+            }
+
+            let params = {};
+            let candidates = [];
+            try {
+                params = this.parseJsonObject(this.form.meta_candidate_params_json, "Candidate Params");
+                candidates = this.parseMetaCandidates();
+            } catch (err) {
+                this.error = err.message || "Could not add candidate";
+                return;
+            }
+
+            const existingIndex = candidates.findIndex((item) => item.strategy === strategy);
+            if (existingIndex >= 0) {
+                candidates[existingIndex] = {strategy: strategy, params: params};
+            } else {
+                candidates.push({strategy: strategy, params: params});
+            }
+            this.form.meta_candidates_json = JSON.stringify(candidates, null, 2);
+            this.resetMetaCandidateDraft();
+        },
+
+        clearMetaCandidates() {
+            this.form.meta_candidates_json = "[]";
+        },
+
+        applyMetaBootstrapPreset(preset) {
+            if (preset === "short_history") {
+                this.form.meta_bootstrap_train_years = 2.0;
+                this.form.meta_bootstrap_test_years = 0.5;
+                this.form.meta_bootstrap_step_months = 6;
+                this.form.meta_bootstrap_anchored = false;
+                return;
+            }
+            this.form.meta_bootstrap_train_years = 5.0;
+            this.form.meta_bootstrap_test_years = 1.0;
+            this.form.meta_bootstrap_step_months = 12;
+            this.form.meta_bootstrap_anchored = false;
+        },
+
+        formatApiError(detail, fallbackMessage) {
+            if (Array.isArray(detail)) {
+                const parts = detail
+                    .map((item) => {
+                        if (item && typeof item === "object") {
+                            const loc = Array.isArray(item.loc) ? item.loc.join(".") : "";
+                            const msg = item.msg || JSON.stringify(item);
+                            return loc ? `${loc}: ${msg}` : msg;
+                        }
+                        return String(item);
+                    })
+                    .filter(Boolean);
+                return parts.length ? parts.join(" | ") : fallbackMessage;
+            }
+            if (detail && typeof detail === "object") {
+                return detail.message || JSON.stringify(detail);
+            }
+            if (detail) {
+                return String(detail);
+            }
+            return fallbackMessage;
+        },
+
+        async runSignals() {
+            this.error = "";
+            this.report = null;
+            this.loading = true;
+            try {
+                let params = {};
+                let portfolio = null;
+                try {
+                    params = this.parseJsonObject(this.form.params_json, "Strategy Params");
+                } catch (err) {
+                    throw new Error(err.message || "Strategy Params JSON is invalid");
+                }
+                if (this.usePortfolio) {
+                    try {
+                        portfolio = this.form.portfolio_json ? JSON.parse(this.form.portfolio_json) : null;
+                    } catch (err) {
+                        throw new Error(`Portfolio JSON is invalid: ${err.message}`);
+                    }
+                }
+
+                let metaDecision = null;
+                if (this.form.meta_enabled) {
+                    try {
+                        const candidates = this.parseMetaCandidates();
+                        metaDecision = {
+                            enabled: true,
+                            candidates: candidates,
+                            params_source: this.form.meta_params_source,
+                            scoring_mode: this.form.meta_scoring_mode,
+                            confirm_points: Number(this.form.meta_confirm_points || 2),
+                            switch_margin: Number(this.form.meta_switch_margin || 0.10),
+                            decision_cadence: this.form.meta_decision_cadence,
+                            plan_mode: this.form.meta_plan_mode,
+                            evidence_required: Boolean(this.form.meta_evidence_required),
+                            evidence_profile: this.form.meta_evidence_profile,
+                            regime_mode: this.form.meta_regime_mode,
+                            regime_profile: this.form.meta_regime_profile,
+                            evidence_max_age_days: Number(this.form.meta_evidence_max_age_days || 30),
+                            gate_fail_action: this.form.meta_gate_fail_action,
+                            alpha_tie_band: Number(this.form.meta_alpha_tie_band || 0.03),
+                            stress_alpha_tolerance: Number(this.form.meta_stress_alpha_tolerance || 0.05),
+                            conditioned_min_windows: Number(this.form.meta_conditioned_min_windows || 4),
+                            evidence_artifact_path: this.form.meta_evidence_artifact_path || null,
+                        };
+                    } catch (err) {
+                        throw new Error(err.message || "Meta Candidates JSON is invalid");
+                    }
+                }
+
+                const exposurePolicy = this.form.exposure_policy_enabled ? {
+                    enabled: true,
+                    profile: this.form.exposure_policy_profile,
+                    core_asset: this.form.exposure_policy_core_asset || null,
+                    level1_ret_5d_floor: Number(this.form.exposure_level1_ret_5d_floor ?? -0.12),
+                    level1_drawdown_21d_floor: Number(this.form.exposure_level1_drawdown_21d_floor ?? -0.25),
+                } : null;
+
+                const payload = {
+                    strategy: this.form.strategy,
+                    params: params,
+                    signal_date: this.form.signal_date || null,
+                    rebalance_frequency: this.form.rebalance_frequency || null,
+                    drift_tolerance: Number(this.form.drift_tolerance || 0.005),
+                    skip_failed: this.form.skip_failed,
+                    portfolio: portfolio,
+                    exposure_policy: exposurePolicy,
+                    meta_decision: metaDecision,
+                };
+
+                const response = await fetch("/api/v1/signals", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(this.formatApiError(data.detail, "Failed to generate signals"));
+                }
+                this.report = data.report;
+            } catch (err) {
+                this.error = err.message || "Unexpected error";
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async runMetaEvidenceTune() {
+            this.metaTuneError = "";
+            this.metaTuneResult = null;
+            this.metaTuneLoading = true;
+            try {
+                const candidates = this.parseMetaCandidates();
+                const target = candidates.find((c) => c.strategy !== this.form.strategy) || candidates[0];
+                if (!target || !target.strategy) {
+                    throw new Error("At least one valid target candidate is required");
+                }
+
+                let gridConfirmPoints = [1, 2, 3];
+                let gridSwitchMargin = [0.05, 0.10, 0.15];
+                if (this.form.meta_tuning_preset === "quick") {
+                    gridConfirmPoints = [1, 2];
+                    gridSwitchMargin = [0.05, 0.10];
+                } else if (this.form.meta_tuning_preset === "thorough") {
+                    gridConfirmPoints = [1, 2, 3, 4];
+                    gridSwitchMargin = [0.03, 0.05, 0.07, 0.10, 0.15];
+                }
+
+                const payload = {
+                    current_strategy: this.form.strategy,
+                    target_strategy: target.strategy,
+                    current_params: this.form.params_json ? JSON.parse(this.form.params_json) : {},
+                    target_params: target.params || {},
+                    as_of: this.form.signal_date || null,
+                    evidence_profile: this.form.meta_evidence_profile,
+                    evidence_max_age_days: Number(this.form.meta_evidence_max_age_days || 30),
+                    evidence_artifact_path: this.form.meta_evidence_artifact_path || null,
+                    train_years: Number(this.form.meta_tuning_train_years || 5),
+                    test_years: Number(this.form.meta_tuning_test_years || 1),
+                    step_months: Number(this.form.meta_tuning_step_months || 12),
+                    anchored: Boolean(this.form.meta_tuning_anchored),
+                    skip_failed: this.form.skip_failed,
+                    tuning_enabled: true,
+                    grid_confirm_points: gridConfirmPoints,
+                    grid_switch_margin: gridSwitchMargin,
+                    max_combinations: Number(this.form.meta_tuning_max_combinations || 120),
+                    top_k: Number(this.form.meta_tuning_top_k || 10),
+                };
+
+                const response = await fetch("/api/v1/meta-evidence/run", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(this.formatApiError(data.detail, "Meta tune failed"));
+                }
+                const tuning = data?.artifact?.tuning || null;
+                if (!tuning) {
+                    throw new Error("No tuning block returned");
+                }
+                this.metaTuneResult = tuning;
+                if (tuning.best_setup) {
+                    this.form.meta_confirm_points = tuning.best_setup.confirm_points;
+                    this.form.meta_switch_margin = tuning.best_setup.switch_margin;
+                }
+            } catch (err) {
+                this.metaTuneError = err.message || "Meta tuning error";
+            } finally {
+                this.metaTuneLoading = false;
+            }
+        },
+
+        async runMetaBootstrap() {
+            this.metaBootstrapError = "";
+            this.metaBootstrapResult = null;
+            this.metaBootstrapLoading = true;
+            try {
+                const strategyA = String(this.form.meta_bootstrap_strategy_a || "").trim();
+                const strategyB = String(this.form.meta_bootstrap_strategy_b || "").trim();
+                if (!strategyA || !strategyB) {
+                    throw new Error("Please select Strategy A and Strategy B");
+                }
+                if (strategyA === strategyB) {
+                    throw new Error("Strategy A and Strategy B must be different");
+                }
+
+                const paramsA = this.parseJsonObject(
+                    this.form.meta_bootstrap_strategy_a_params_json,
+                    "Strategy A Params"
+                );
+                const paramsB = this.parseJsonObject(
+                    this.form.meta_bootstrap_strategy_b_params_json,
+                    "Strategy B Params"
+                );
+
+                const payload = {
+                    strategy_a: strategyA,
+                    strategy_b: strategyB,
+                    strategy_a_params: paramsA,
+                    strategy_b_params: paramsB,
+                    as_of: this.form.signal_date || null,
+                    evidence_profile: this.form.meta_evidence_profile,
+                    evidence_max_age_days: Number(this.form.meta_evidence_max_age_days || 30),
+                    train_years: Number(this.form.meta_bootstrap_train_years || 5),
+                    test_years: Number(this.form.meta_bootstrap_test_years || 1),
+                    step_months: Number(this.form.meta_bootstrap_step_months || 12),
+                    anchored: Boolean(this.form.meta_bootstrap_anchored),
+                    start_date: "2010-01-01",
+                    initial_capital: 10000,
+                    costs_pct: 0.001,
+                    skip_failed: this.form.skip_failed,
+                    metric_basis: "gross",
+                    fallback_cagr_tie_band_pp: Number(this.form.meta_bootstrap_fallback_cagr_tie_band_pp || 1.0),
+                    fallback_tie_breaker: this.form.meta_bootstrap_fallback_tie_breaker,
+                };
+
+                const response = await fetch("/api/v1/meta-bootstrap/run", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(this.formatApiError(data.detail, "Meta bootstrap failed"));
+                }
+                this.metaBootstrapResult = data.artifact;
+            } catch (err) {
+                this.metaBootstrapError = err.message || "Meta bootstrap error";
+            } finally {
+                this.metaBootstrapLoading = false;
+            }
+        },
+
+        evidenceStatusClass(status) {
+            const normalized = String(status || "").toLowerCase();
+            if (normalized === "pass") return "bg-green-100 text-green-800";
+            if (normalized === "stale") return "bg-yellow-100 text-yellow-800";
+            if (normalized === "missing") return "bg-gray-200 text-gray-700";
+            return "bg-red-100 text-red-800";
+        },
+
+        switchCheckClass(status) {
+            const normalized = String(status || "").toLowerCase();
+            if (normalized === "pass") return "bg-green-100 text-green-800";
+            if (normalized === "not_applicable") return "bg-gray-200 text-gray-700";
+            return "bg-red-100 text-red-800";
+        },
+    };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Data cache (reproduced by the data loader)
+data/*.csv
+data/*.parquet
+data/_cache_manifest.json
+data/universe_cache/
+data/cache/
+data/constituents_cache/
+
+# Generated reports & results (reproducible artifacts)
+reports/*.html
+reports/*.json
+results/
+
+# Trained ML bundles (reproduced by scripts/train_*.py)
+data/external_features/ml/models/**/*.pkl
+data/external_features/ml/models_regime/**/*.pkl
+
+# Personal / private (must never reach the public repo)
+data/manual/portfolio_*.json
+!data/manual/portfolio_*.example.json
+STATE.md
+TASK.md
+PLAN.md
+docs/personal_*

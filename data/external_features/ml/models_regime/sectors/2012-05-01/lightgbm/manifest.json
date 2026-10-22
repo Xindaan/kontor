@@ -1,0 +1,39 @@
+{
+  "available_from": "2012-05-01",
+  "bundle_hash": "4d5cf4ff56b8e18f47359fc52e8080505838e4be9ec32acd93c25470b9cfbede",
+  "class_names": {
+    "0": "normal",
+    "1": "fragile",
+    "2": "stressed"
+  },
+  "classes": [
+    0,
+    1,
+    2
+  ],
+  "feature_columns": [
+    "ret_21d",
+    "ret_63d",
+    "ret_252d",
+    "vol_63d",
+    "maxdd_126d",
+    "trend_spread"
+  ],
+  "feature_trained_through": "2012-03-29",
+  "framework": "lightgbm_classifier",
+  "label_distribution": {
+    "fragile": 0.08297915401740538,
+    "normal": 0.8021857923497268,
+    "stressed": 0.11483505363286783
+  },
+  "label_horizon_days": 21,
+  "labels_known_through": "2012-04-30",
+  "lib_versions": {
+    "lightgbm": "4.6.0",
+    "numpy": "1.26.4",
+    "pandas": "2.3.3"
+  },
+  "n_training_rows": 24705,
+  "notes": null,
+  "seed": 42
+}

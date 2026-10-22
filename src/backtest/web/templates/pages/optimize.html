@@ -1,0 +1,1142 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="optimize()" class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Parameter Optimization</h1>
+            <p class="text-sm text-gray-500 mt-1">Find optimal strategy parameters by grid search</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Form -->
+        <div class="lg:col-span-1">
+            <form @submit.prevent="runOptimize" novalidate class="card">
+                <div class="px-6 py-4 border-b">
+                    <h2 class="text-lg font-semibold text-gray-900">Configuration</h2>
+                </div>
+
+                <div class="p-6 space-y-4">
+                    <!-- Strategy Selection -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Strategy</label>
+                        <select x-model="form.strategy" @change="loadStrategyParams"
+                                class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Select a strategy...</option>
+                            {% for strategy in strategies %}
+                            <option value="{{ strategy.file_path }}">{{ strategy.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Strategy Parameters Info (dynamically loaded) -->
+                    <div x-show="strategySchema" x-cloak class="bg-blue-50 border border-blue-200 rounded-md p-3">
+                        <p class="text-xs font-medium text-blue-800 mb-2">Available Parameters:</p>
+                        <div class="space-y-1">
+                            <template x-for="param in strategySchema?.parameters || []" :key="param.name">
+                                <div class="text-xs text-blue-700">
+                                    <span class="font-mono font-semibold" x-text="param.name"></span>
+                                    <span class="text-blue-500">(<span x-text="param.type"></span>)</span>
+                                    <template x-if="param.default !== null && param.default !== undefined">
+                                        <span class="text-blue-400"> = <span x-text="JSON.stringify(param.default)"></span></span>
+                                    </template>
+                                </div>
+                            </template>
+                            <p x-show="!strategySchema?.parameters?.length" class="text-xs text-blue-500 italic">
+                                No configurable parameters
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Parameter Grid -->
+                    <div class="border-t pt-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-sm font-medium text-gray-700">Parameter Grid</h3>
+                            <div class="flex items-center space-x-2">
+                                <button type="button" @click="addParamFromSchema"
+                                        x-show="strategySchema?.parameters?.length > 0"
+                                        class="text-xs text-green-600 hover:text-green-800">
+                                    + From Schema
+                                </button>
+                                <button type="button" @click="addParam"
+                                        class="text-xs text-blue-600 hover:text-blue-800">
+                                    + Custom
+                                </button>
+                            </div>
+                        </div>
+
+                        <template x-if="form.param_grid.length === 0">
+                            <p class="text-xs text-gray-500 italic">No parameters added. Select a strategy to see available parameters.</p>
+                        </template>
+
+                        <template x-for="(param, index) in form.param_grid" :key="index">
+                            <div class="mb-3 p-3 bg-gray-50 rounded-md">
+                                <div class="flex justify-between items-start mb-2">
+                                    <div class="flex-1 mr-2">
+                                        <label class="block text-xs text-gray-600 mb-1">Parameter Name</label>
+                                        <template x-if="param.fromSchema && strategySchema?.parameters?.length > 0">
+                                            <select x-model="param.name" @change="updateParamDefault(index)"
+                                                    class="w-full border rounded px-2 py-1 text-sm">
+                                                <option value="">Select parameter...</option>
+                                                <template x-for="sp in strategySchema.parameters" :key="sp.name">
+                                                    <option :value="sp.name" x-text="sp.name"></option>
+                                                </template>
+                                            </select>
+                                        </template>
+                                        <template x-if="!param.fromSchema">
+                                            <input type="text" x-model="param.name" placeholder="e.g. lookback_days"
+                                                   class="w-full border rounded px-2 py-1 text-sm">
+                                        </template>
+                                    </div>
+                                    <button type="button" @click="removeParam(index)"
+                                            class="text-red-500 hover:text-red-700 text-sm mt-5">
+                                        &times;
+                                    </button>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">
+                                        Values (comma-separated)
+                                        <template x-if="param.defaultValue !== undefined">
+                                            <span class="text-gray-400">- default: <span x-text="param.defaultValue"></span></span>
+                                        </template>
+                                    </label>
+                                    <input type="text" x-model="param.values_str" placeholder="e.g. 63,126,252"
+                                           class="w-full border rounded px-2 py-1 text-sm">
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Rebalance Frequencies -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Rebalance Frequencies</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" value="daily" x-model="form.rebalance_frequencies"
+                                       class="rounded border-gray-300 text-blue-600">
+                                <span class="text-sm">Daily</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" value="weekly" x-model="form.rebalance_frequencies"
+                                       class="rounded border-gray-300 text-blue-600">
+                                <span class="text-sm">Weekly</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" value="monthly" x-model="form.rebalance_frequencies"
+                                       class="rounded border-gray-300 text-blue-600">
+                                <span class="text-sm">Monthly</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" value="quarterly" x-model="form.rebalance_frequencies"
+                                       class="rounded border-gray-300 text-blue-600">
+                                <span class="text-sm">Quarterly</span>
+                            </label>
+                            <label class="flex items-center space-x-2">
+                                <input type="checkbox" value="yearly" x-model="form.rebalance_frequencies"
+                                       class="rounded border-gray-300 text-blue-600">
+                                <span class="text-sm">Yearly</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Walk-Forward Mode -->
+                    <div class="border-t pt-4">
+                        <div class="flex items-center mb-3">
+                            <input type="checkbox" x-model="form.walk_forward" id="walk_forward"
+                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <label for="walk_forward" class="ml-2 text-sm font-medium text-gray-700">Walk-Forward Optimization</label>
+                        </div>
+
+                        <div x-show="form.walk_forward" x-collapse class="space-y-3 pl-6 border-l-2 border-blue-200">
+                            <p class="text-xs text-gray-500">Tests out-of-sample performance to detect overfitting</p>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">Train (years)</label>
+                                    <input type="number" x-model.number="form.wf_train_years" min="1" max="20" step="0.5"
+                                           class="w-full border rounded px-2 py-1 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">Test (years)</label>
+                                    <input type="number" x-model.number="form.wf_test_years" min="0.5" max="5" step="0.5"
+                                           class="w-full border rounded px-2 py-1 text-sm">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">Step (months)</label>
+                                    <input type="number" x-model.number="form.wf_step_months" min="1" max="24"
+                                           class="w-full border rounded px-2 py-1 text-sm">
+                                </div>
+                                <div>
+                                    <label class="flex items-center mt-5">
+                                        <input type="checkbox" x-model="form.wf_anchored"
+                                               class="rounded border-gray-300 text-blue-600">
+                                        <span class="ml-2 text-xs text-gray-700">Anchored</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="border-t pt-3">
+                                <label class="flex items-center">
+                                    <input type="checkbox" x-model="form.walk_forward_nested"
+                                           class="rounded border-gray-300 text-blue-600">
+                                    <span class="ml-2 text-xs font-medium text-gray-700">Nested Walk-Forward</span>
+                                </label>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Optimizes inside each outer training window before OOS testing.
+                                </p>
+
+                                <div x-show="form.walk_forward_nested" x-collapse class="mt-3 space-y-3">
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-xs text-gray-600 mb-1">Inner Train (years)</label>
+                                            <input type="number" x-model.number="form.wf_inner_train_years" min="0.5" max="10" step="0.5"
+                                                   class="w-full border rounded px-2 py-1 text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs text-gray-600 mb-1">Inner Test (years)</label>
+                                            <input type="number" x-model.number="form.wf_inner_test_years" min="0.5" max="5" step="0.5"
+                                                   class="w-full border rounded px-2 py-1 text-sm">
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-xs text-gray-600 mb-1">Inner Step (months)</label>
+                                            <input type="number" x-model.number="form.wf_inner_step_months" min="1" max="24"
+                                                   class="w-full border rounded px-2 py-1 text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="flex items-center mt-5">
+                                                <input type="checkbox" x-model="form.wf_inner_anchored"
+                                                       class="rounded border-gray-300 text-blue-600">
+                                                <span class="ml-2 text-xs text-gray-700">Inner Anchored</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Optimization Settings -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Optimization Target</h3>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Metric</label>
+                                <select x-model="form.metric"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="sharpe_ratio">Sharpe Ratio</option>
+                                    <option value="sortino_ratio">Sortino Ratio</option>
+                                    <option value="cagr">CAGR</option>
+                                    <option value="calmar_ratio">Calmar Ratio</option>
+                                    <option value="max_drawdown">Max Drawdown</option>
+                                    <option value="volatility">Volatility</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Direction</label>
+                                <select x-model="form.minimize"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="false">Maximize</option>
+                                    <option value="true">Minimize</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <label class="block text-sm text-gray-600 mb-1">Top N Results</label>
+                            <input type="number" x-model.number="form.top_n" min="1" max="50"
+                                   class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+
+                    <!-- Date Range & Capital -->
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Backtest Settings</h3>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Start Date</label>
+                                <input type="date" x-model="form.start_date"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">End Date</label>
+                                <input type="date" x-model="form.end_date"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 mt-3">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Capital</label>
+                                <input type="number" x-model.number="form.initial_capital" min="100" step="1000"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Metric Basis</label>
+                                <select x-model="form.metric_basis"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="gross">Gross</option>
+                                    <option value="net_realized">Net Realized</option>
+                                    <option value="net_liquidation">Net Liquidation</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <div class="border-t pt-4" x-data="{ advOpen: false }">
+                        <button type="button" @click="advOpen = !advOpen" class="collapsible-trigger w-full">
+                            <span class="text-sm font-medium">Advanced Options</span>
+                            <svg class="collapsible-arrow" :class="advOpen && 'collapsible-arrow--open'" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <div x-show="advOpen" x-collapse class="mt-3 space-y-3">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Preset Profile</label>
+                                <select x-model="form.preset_profile" @change="applyPresetProfile"
+                                        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="">Custom / No Preset</option>
+                                    <option value="research">Research (Fast)</option>
+                                    <option value="realistic">Realistic (Core)</option>
+                                    <option value="defensive">Defensive (Strict)</option>
+                                </select>
+                                <p class="text-xs text-gray-500 mt-1">Fills execution and risk defaults; you can still adjust fields afterwards.</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Costs (%)</label>
+                                <input type="number" x-model.number="form.costs_pct" step="0.01" min="0"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">Tax Exemption (EUR)</label>
+                                <input type="number" x-model.number="form.tax_exemption" step="100" min="0"
+                                       class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Execution Lag (days)</label>
+                                    <input type="number" x-model.number="form.execution_lag_days" min="0" step="1"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Max Volume Participation</label>
+                                    <input type="number" x-model.number="form.max_volume_participation" min="0" max="1" step="0.01"
+                                           placeholder="0.10 = 10%"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Min Daily $ Volume</label>
+                                    <input type="number" x-model.number="form.min_daily_dollar_volume" min="0" step="1000"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">Missing Volume</label>
+                                    <select x-model="form.liquidity_on_missing_volume"
+                                            class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="allow">Allow Trade</option>
+                                        <option value="skip">Skip Trade</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="border-t pt-3">
+                                <p class="text-xs font-medium text-gray-700 mb-2">Risk Overlays</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Max Position</label>
+                                        <input type="number" x-model.number="form.max_position" min="0" max="1" step="0.01"
+                                               placeholder="0.25"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">Turnover Budget</label>
+                                        <input type="number" x-model.number="form.turnover_budget" min="0" max="1" step="0.01"
+                                               placeholder="0.20"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <label class="block text-sm text-gray-600 mb-1">Sector Caps</label>
+                                    <input type="text" x-model="form.sector_caps_text" placeholder="equity=0.6, bonds=0.4"
+                                           class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div class="mt-3">
+                                    <label class="block text-sm text-gray-600 mb-1">Ticker Sectors</label>
+                                    <textarea x-model="form.ticker_sectors_text" rows="2" placeholder="SPY=equity, BND=bonds"
+                                              class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                                </div>
+                                <div class="grid grid-cols-3 gap-3 mt-3">
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Brake Threshold</label>
+                                        <input type="number" x-model.number="form.drawdown_brake_threshold" min="0" max="1" step="0.01"
+                                               placeholder="0.15"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Brake Cash</label>
+                                        <input type="number" x-model.number="form.drawdown_brake_cash_target" min="0" max="1" step="0.01"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm text-gray-600 mb-1">DD Release</label>
+                                        <input type="number" x-model.number="form.drawdown_brake_release" min="0" max="1" step="0.01"
+                                               placeholder="0.08"
+                                               class="w-full border rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="form.tax_enabled" id="tax_enabled"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="tax_enabled" class="ml-2 text-sm text-gray-700">Enable German Tax</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="form.drip_enabled" id="drip_enabled"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="drip_enabled" class="ml-2 text-sm text-gray-700">DRIP (Dividend Reinvestment)</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="form.skip_failed" id="skip_failed"
+                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="skip_failed" class="ml-2 text-sm text-gray-700">Skip Failed Tickers</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Combination Info -->
+                    <div class="border-t pt-4" x-show="totalCombinations > 0">
+                        <p class="text-sm text-gray-600">
+                            Total combinations: <span class="font-semibold" x-text="totalCombinations"></span>
+                            <template x-if="form.walk_forward">
+                                <span class="text-gray-400"> (per window)</span>
+                            </template>
+                        </p>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit"
+                            :disabled="loading || !form.strategy || form.rebalance_frequencies.length === 0"
+                            class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        <span x-show="!loading" x-text="form.walk_forward ? (form.walk_forward_nested ? 'Run Nested Walk-Forward' : 'Run Walk-Forward') : 'Run Optimization'"></span>
+                        <span x-show="loading" class="flex items-center justify-center">
+                            <svg class="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            Running...
+                        </span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Results -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Progress Display -->
+            <div x-show="loading" x-cloak class="card p-4">
+                <p class="text-sm text-gray-700" x-text="progressSummary"></p>
+                <p class="text-xs text-gray-500 mt-1" x-text="progressDetail"></p>
+                <p class="text-xs text-gray-500 mt-2">
+                    Elapsed: <span x-text="formatDuration(elapsedSeconds)"></span>
+                </p>
+            </div>
+
+            <!-- Error Display -->
+            <div x-show="error" x-cloak class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div class="flex items-start">
+                    <svg class="w-5 h-5 text-red-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <div>
+                        <h3 class="text-red-800 font-medium">Error</h3>
+                        <p class="text-red-700 text-sm mt-1" x-text="error"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Panel -->
+            <template x-if="result">
+                <div class="space-y-6">
+                    <!-- Summary Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="card p-4">
+                            <p class="text-sm text-gray-500">Strategy</p>
+                            <p class="text-lg font-semibold text-gray-900" x-text="result.strategy_name"></p>
+                        </div>
+                        <div class="card p-4">
+                            <p class="text-sm text-gray-500">Total Combinations</p>
+                            <p class="text-lg font-semibold text-gray-900" x-text="result.total_combinations"></p>
+                        </div>
+                        <div class="card p-4">
+                            <p class="text-sm text-gray-500">Successful</p>
+                            <p class="text-lg font-semibold text-green-600" x-text="result.successful_runs"></p>
+                        </div>
+                        <div class="card p-4">
+                            <p class="text-sm text-gray-500">Failed</p>
+                            <p class="text-lg font-semibold" :class="result.failed_runs > 0 ? 'text-red-600' : 'text-gray-900'" x-text="result.failed_runs"></p>
+                        </div>
+                    </div>
+
+                    <!-- Best Parameters Card -->
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-6" x-show="result.best_params">
+                        <h3 class="text-lg font-semibold text-green-800 mb-3">Best Parameters</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <p class="text-sm text-green-600">Rebalance</p>
+                                <p class="font-semibold text-green-900" x-text="result.best_rebalance_frequency"></p>
+                            </div>
+                            <template x-for="(value, key) in result.best_params" :key="key">
+                                <div>
+                                    <p class="text-sm text-green-600" x-text="key"></p>
+                                    <p class="font-semibold text-green-900" x-text="value"></p>
+                                </div>
+                            </template>
+                            <div>
+                                <p class="text-sm text-green-600" x-text="result.metric"></p>
+                                <p class="font-semibold text-green-900" x-text="formatMetricValue(result.best_metric_value, result.metric)"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Results Table -->
+                    <div class="card overflow-hidden">
+                        <div class="px-6 py-4 border-b">
+                            <h3 class="text-lg font-semibold text-gray-900" x-show="result.results.length > 0">
+                                Top <span x-text="result.results.length"></span> Results
+                                <span class="text-sm font-normal text-gray-500">
+                                    (by <span x-text="result.metric"></span>, <span x-text="result.minimize ? 'minimized' : 'maximized'"></span>)
+                                </span>
+                            </h3>
+                            <h3 class="text-lg font-semibold text-gray-900" x-show="result.results.length === 0">
+                                No grid results
+                            </h3>
+                        </div>
+                        <div x-show="result.results.length === 0" class="px-6 py-4 text-sm text-gray-500">
+                            <template x-if="result.walk_forward_result">
+                                <p>No grid results are produced for walk-forward optimization.</p>
+                            </template>
+                            <template x-if="!result.walk_forward_result">
+                                <p>No successful grid runs were produced. Try adjusting parameter ranges or data settings.</p>
+                            </template>
+                        </div>
+                        <div class="overflow-x-auto" x-show="result.results.length > 0">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th @click="toggleSort('rank')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            Rank
+                                            <span x-show="sortColumn === 'rank'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <th @click="toggleSort('rebalance_frequency')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            Rebalance
+                                            <span x-show="sortColumn === 'rebalance_frequency'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                            Parameters
+                                        </th>
+                                        <th @click="toggleSort('cagr')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            CAGR
+                                            <span x-show="sortColumn === 'cagr'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <th @click="toggleSort('sharpe_ratio')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            Sharpe
+                                            <span x-show="sortColumn === 'sharpe_ratio'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <th @click="toggleSort('sortino_ratio')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            Sortino
+                                            <span x-show="sortColumn === 'sortino_ratio'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <th @click="toggleSort('max_drawdown')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            MaxDD
+                                            <span x-show="sortColumn === 'max_drawdown'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <th @click="toggleSort('volatility')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            Vol
+                                            <span x-show="sortColumn === 'volatility'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                        <th @click="toggleSort('calmar_ratio')" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                                            Calmar
+                                            <span x-show="sortColumn === 'calmar_ratio'" x-text="sortDirection === 'asc' ? ' ▲' : ' ▼'"></span>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <template x-for="row in sortedResults" :key="row.rank">
+                                        <tr :class="row.rank === 1 ? 'bg-green-50' : ''">
+                                            <td class="px-4 py-3 text-sm font-medium" :class="row.rank === 1 ? 'text-green-700' : 'text-gray-900'" x-text="row.rank"></td>
+                                            <td class="px-4 py-3 text-sm text-gray-600" x-text="row.rebalance_frequency"></td>
+                                            <td class="px-4 py-3 text-sm text-gray-600">
+                                                <template x-for="(value, key) in row.params" :key="key">
+                                                    <span class="inline-block bg-gray-100 rounded px-2 py-0.5 mr-1 mb-1 text-xs">
+                                                        <span x-text="key"></span>=<span x-text="value"></span>
+                                                    </span>
+                                                </template>
+                                                <span x-show="Object.keys(row.params).length === 0" class="text-gray-400 italic">default</span>
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-right" :class="(row.cagr || 0) >= 0 ? 'text-green-600' : 'text-red-600'" x-text="formatPct(row.cagr)"></td>
+                                            <td class="px-4 py-3 text-sm text-right text-gray-900" x-text="formatNum(row.sharpe_ratio, 2)"></td>
+                                            <td class="px-4 py-3 text-sm text-right text-gray-900" x-text="formatNum(row.sortino_ratio, 2)"></td>
+                                            <td class="px-4 py-3 text-sm text-right text-red-600" x-text="formatPct(row.max_drawdown)"></td>
+                                            <td class="px-4 py-3 text-sm text-right text-gray-900" x-text="formatPct(row.volatility)"></td>
+                                            <td class="px-4 py-3 text-sm text-right text-gray-900" x-text="formatNum(row.calmar_ratio, 2)"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Walk-Forward Results -->
+                    <template x-if="result.walk_forward_result">
+                        <div class="space-y-4">
+                            <!-- Walk-Forward Summary Card -->
+                            <div class="card p-6">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Walk-Forward Analysis</h3>
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div class="text-center">
+                                        <p class="text-2xl font-bold text-blue-600" x-text="result.walk_forward_result.avg_is_sharpe?.toFixed(2) || '-'"></p>
+                                        <p class="text-sm text-gray-500">In-Sample Sharpe</p>
+                                    </div>
+                                    <div class="text-center">
+                                        <p class="text-2xl font-bold" :class="result.walk_forward_result.avg_oos_sharpe >= 0 ? 'text-green-600' : 'text-red-600'"
+                                           x-text="result.walk_forward_result.avg_oos_sharpe?.toFixed(2) || '-'"></p>
+                                        <p class="text-sm text-gray-500">Out-of-Sample Sharpe</p>
+                                    </div>
+                                    <div class="text-center">
+                                        <p class="text-2xl font-bold" :class="result.walk_forward_result.degradation_ratio < 0.3 ? 'text-green-600' : 'text-orange-600'"
+                                           x-text="((result.walk_forward_result.degradation_ratio || 0) * 100).toFixed(0) + '%'"></p>
+                                        <p class="text-sm text-gray-500">Degradation</p>
+                                    </div>
+                                    <div class="text-center">
+                                        <p class="text-2xl font-bold" :class="result.walk_forward_result.overfitting_score < 0.5 ? 'text-green-600' : 'text-red-600'"
+                                           x-text="result.walk_forward_result.overfitting_score?.toFixed(2) || '-'"></p>
+                                        <p class="text-sm text-gray-500">Overfitting Score</p>
+                                    </div>
+                                </div>
+
+                                <!-- Interpretation -->
+                                <div class="mt-4 p-3 rounded" :class="result.walk_forward_result.overfitting_score < 0.3 ? 'bg-green-50 border border-green-200' : (result.walk_forward_result.overfitting_score < 0.6 ? 'bg-yellow-50 border border-yellow-200' : 'bg-red-50 border border-red-200')">
+                                    <p class="text-sm" :class="result.walk_forward_result.overfitting_score < 0.3 ? 'text-green-800' : (result.walk_forward_result.overfitting_score < 0.6 ? 'text-yellow-800' : 'text-red-800')"
+                                       x-text="result.walk_forward_result.overfitting_score < 0.3 ? '✓ Strategy shows robust out-of-sample performance' : (result.walk_forward_result.overfitting_score < 0.6 ? '⚠ Moderate overfitting detected - use caution' : '✗ High overfitting risk - strategy may not perform well in live trading')"></p>
+                                </div>
+
+                                <!-- Config Info -->
+                                <div class="mt-4 text-sm text-gray-500">
+                                    Mode: <span x-text="result.walk_forward_result.nested ? 'Nested' : 'Standard'"></span> |
+                                    <span x-text="result.walk_forward_result.num_windows"></span> windows |
+                                    Train: <span x-text="result.walk_forward_result.train_months"></span> months |
+                                    Test: <span x-text="result.walk_forward_result.test_months"></span> months |
+                                    Step: <span x-text="result.walk_forward_result.step_months"></span> months |
+                                    <span x-text="result.walk_forward_result.anchored ? 'Anchored' : 'Rolling'"></span>
+                                    <template x-if="result.walk_forward_result.nested">
+                                        <span>
+                                            | Inner: <span x-text="result.walk_forward_result.inner_train_months"></span>/<span x-text="result.walk_forward_result.inner_test_months"></span>/<span x-text="result.walk_forward_result.inner_step_months"></span>
+                                            months (<span x-text="result.walk_forward_result.inner_anchored ? 'anchored' : 'rolling'"></span>)
+                                        </span>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Windows Table -->
+                            <div class="card overflow-hidden">
+                                <div class="px-4 py-3 border-b">
+                                    <h3 class="font-semibold text-gray-900">Window Results</h3>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-gray-200">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Train Period</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Test Period</th>
+                                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Train Sharpe</th>
+                                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Test Sharpe</th>
+                                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Test CAGR</th>
+                                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Degradation</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rebalance</th>
+                                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Inner Score</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Best Params</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-200">
+                                            <template x-for="w in result.walk_forward_result.windows" :key="w.window_num">
+                                                <tr class="hover:bg-gray-50">
+                                                    <td class="px-4 py-2 text-sm text-gray-900" x-text="w.window_num"></td>
+                                                    <td class="px-4 py-2 text-sm text-gray-600" x-text="w.train_start + ' → ' + w.train_end"></td>
+                                                    <td class="px-4 py-2 text-sm text-gray-600" x-text="w.test_start + ' → ' + w.test_end"></td>
+                                                    <td class="px-4 py-2 text-sm text-right text-blue-600" x-text="w.train_sharpe?.toFixed(2) || '-'"></td>
+                                                    <td class="px-4 py-2 text-sm text-right" :class="(w.test_sharpe || 0) >= 0 ? 'text-green-600' : 'text-red-600'" x-text="w.test_sharpe?.toFixed(2) || '-'"></td>
+                                                    <td class="px-4 py-2 text-sm text-right" :class="(w.test_cagr || 0) >= 0 ? 'text-green-600' : 'text-red-600'" x-text="w.test_cagr ? ((w.test_cagr * 100).toFixed(1) + '%') : '-'"></td>
+                                                    <td class="px-4 py-2 text-sm text-right" :class="(w.degradation || 0) < 0.3 ? 'text-green-600' : 'text-orange-600'" x-text="((w.degradation || 0) * 100).toFixed(0) + '%'"></td>
+                                                    <td class="px-4 py-2 text-xs text-gray-600" x-text="w.best_rebalance_frequency || '-'"></td>
+                                                    <td class="px-4 py-2 text-xs text-right text-gray-600">
+                                                        <span x-show="w.inner_score_mean !== null && w.inner_score_mean !== undefined" x-text="w.inner_score_mean.toFixed(3) + ' ± ' + (w.inner_score_std || 0).toFixed(3)"></span>
+                                                        <span x-show="w.inner_score_mean === null || w.inner_score_mean === undefined">-</span>
+                                                    </td>
+                                                    <td class="px-4 py-2 text-xs text-gray-500 font-mono" x-text="Object.entries(w.best_params || {}).map(([k,v]) => k + '=' + v).join(', ') || '-'"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Placeholder -->
+            <template x-if="!result && !loading && !error">
+                <div class="bg-gray-50 rounded-lg p-12 text-center">
+                    <svg class="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">Run Parameter Optimization</h3>
+                    <p class="text-gray-500">Select a strategy to see available parameters.</p>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>
+
+<script>
+function optimize() {
+    return {
+        loading: false,
+        error: null,
+        result: null,
+        strategySchema: null,
+        elapsedSeconds: 0,
+        elapsedTimer: null,
+        progressData: null,
+        progressInterval: null,
+        currentRunId: null,
+
+        // Sorting state
+        sortColumn: null,
+        sortDirection: 'asc',
+
+        form: {
+            strategy: '',
+            param_grid: [],
+            rebalance_frequencies: ['monthly'],
+            metric: 'sharpe_ratio',
+            minimize: 'false',
+            top_n: 10,
+            start_date: '2010-01-01',
+            end_date: '',
+            initial_capital: 10000,
+            metric_basis: 'net_liquidation',
+            costs_pct: 0.1,
+            tax_exemption: 1000,
+            tax_enabled: true,
+            drip_enabled: false,
+            skip_failed: true,
+            preset_profile: '',
+            execution_lag_days: 0,
+            max_volume_participation: null,
+            min_daily_dollar_volume: 0,
+            liquidity_on_missing_volume: 'allow',
+            max_position: null,
+            turnover_budget: null,
+            sector_caps_text: '',
+            ticker_sectors_text: '',
+            drawdown_brake_threshold: null,
+            drawdown_brake_cash_target: 1.0,
+            drawdown_brake_release: null,
+            // Walk-forward settings
+            walk_forward: false,
+            walk_forward_nested: false,
+            wf_train_years: 5,
+            wf_test_years: 1,
+            wf_step_months: 12,
+            wf_anchored: false,
+            wf_inner_train_years: 3,
+            wf_inner_test_years: 1,
+            wf_inner_step_months: 6,
+            wf_inner_anchored: false,
+        },
+
+        get totalCombinations() {
+            let paramCombos = 1;
+            for (const param of this.form.param_grid) {
+                const values = this.parseValues(param.values_str);
+                if (values.length > 0) {
+                    paramCombos *= values.length;
+                }
+            }
+            return paramCombos * this.form.rebalance_frequencies.length;
+        },
+
+        get sortedResults() {
+            if (!this.result?.results) return [];
+            if (!this.sortColumn) return this.result.results;
+
+            const results = [...this.result.results];
+            const col = this.sortColumn;
+            const dir = this.sortDirection === 'asc' ? 1 : -1;
+
+            return results.sort((a, b) => {
+                let aVal, bVal;
+
+                if (col === 'rebalance_frequency') {
+                    aVal = a.rebalance_frequency || '';
+                    bVal = b.rebalance_frequency || '';
+                    return dir * aVal.localeCompare(bVal);
+                }
+
+                aVal = a[col];
+                bVal = b[col];
+
+                if (aVal === null || aVal === undefined) return 1;
+                if (bVal === null || bVal === undefined) return -1;
+
+                return dir * (aVal - bVal);
+            });
+        },
+
+        toggleSort(column) {
+            if (this.sortColumn === column) {
+                this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sortColumn = column;
+                // Default directions
+                if (column === 'rank' || column === 'max_drawdown' || column === 'volatility' || column === 'rebalance_frequency') {
+                    this.sortDirection = 'asc';
+                } else {
+                    this.sortDirection = 'desc';
+                }
+            }
+        },
+
+        addParam() {
+            this.form.param_grid.push({
+                name: '',
+                values_str: '',
+                fromSchema: false
+            });
+        },
+
+        addParamFromSchema() {
+            this.form.param_grid.push({
+                name: '',
+                values_str: '',
+                fromSchema: true,
+                defaultValue: undefined
+            });
+        },
+
+        updateParamDefault(index) {
+            const param = this.form.param_grid[index];
+            if (param.fromSchema && param.name && this.strategySchema?.parameters) {
+                const schemaParam = this.strategySchema.parameters.find(p => p.name === param.name);
+                if (schemaParam) {
+                    param.defaultValue = schemaParam.default;
+                    // Suggest some values based on default
+                    if (schemaParam.default !== null && schemaParam.default !== undefined && !param.values_str) {
+                        const def = schemaParam.default;
+                        if (typeof def === 'number') {
+                            // Suggest range around default
+                            const half = Math.round(def * 0.5);
+                            const double = Math.round(def * 2);
+                            param.values_str = `${half},${def},${double}`;
+                        }
+                    }
+                }
+            }
+        },
+
+        removeParam(index) {
+            this.form.param_grid.splice(index, 1);
+        },
+
+        parseValues(str) {
+            if (!str || !str.trim()) return [];
+            return str.split(',').map(v => {
+                v = v.trim();
+                // Try to parse as number
+                const num = parseFloat(v);
+                if (!isNaN(num) && v === String(num)) {
+                    return num;
+                }
+                // Try to parse as int
+                const int = parseInt(v);
+                if (!isNaN(int) && v === String(int)) {
+                    return int;
+                }
+                return v;
+            }).filter(v => v !== '');
+        },
+
+        applyPresetProfile() {
+            const presets = {
+                research: {
+                    execution_lag_days: 0,
+                    max_volume_participation: null,
+                    min_daily_dollar_volume: 0,
+                    liquidity_on_missing_volume: 'allow',
+                    max_position: null,
+                    turnover_budget: null,
+                    drawdown_brake_threshold: null,
+                    drawdown_brake_cash_target: 1.0,
+                    drawdown_brake_release: null,
+                },
+                realistic: {
+                    execution_lag_days: 1,
+                    max_volume_participation: 0.10,
+                    min_daily_dollar_volume: 250000,
+                    liquidity_on_missing_volume: 'skip',
+                    max_position: 0.35,
+                    turnover_budget: 0.35,
+                    drawdown_brake_threshold: null,
+                    drawdown_brake_cash_target: 1.0,
+                    drawdown_brake_release: null,
+                },
+                defensive: {
+                    execution_lag_days: 1,
+                    max_volume_participation: 0.05,
+                    min_daily_dollar_volume: 1000000,
+                    liquidity_on_missing_volume: 'skip',
+                    max_position: 0.25,
+                    turnover_budget: 0.20,
+                    drawdown_brake_threshold: 0.15,
+                    drawdown_brake_cash_target: 0.70,
+                    drawdown_brake_release: 0.08,
+                },
+            };
+            const preset = presets[this.form.preset_profile];
+            if (!preset) {
+                return;
+            }
+            Object.assign(this.form, preset);
+        },
+
+        async loadStrategyParams() {
+            this.strategySchema = null;
+            this.form.param_grid = [];
+
+            if (!this.form.strategy) {
+                return;
+            }
+
+            try {
+                // Extract filename from path for the API
+                const filename = this.form.strategy.split('/').pop();
+                const response = await fetch(`/api/v1/strategies/${encodeURIComponent(filename)}/schema`);
+                if (response.ok) {
+                    this.strategySchema = await response.json();
+                }
+            } catch (e) {
+                console.error('Failed to load strategy schema:', e);
+            }
+        },
+
+        async runOptimize() {
+            this.loading = true;
+            this.error = null;
+            this.result = null;
+            this.sortColumn = null;
+            this.currentRunId = (crypto?.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random()}`;
+            this.startTimer();
+            this.startProgressPolling(this.currentRunId);
+
+            try {
+                // Build param_grid
+                const param_grid = this.form.param_grid
+                    .filter(p => p.name && p.values_str)
+                    .map(p => ({
+                        name: p.name.trim(),
+                        values: this.parseValues(p.values_str)
+                    }))
+                    .filter(p => p.values.length > 0);
+                const sectorCaps = parseKeyValueMap(this.form.sector_caps_text, true);
+                const tickerSectors = parseKeyValueMap(this.form.ticker_sectors_text, false);
+
+                const payload = {
+                    strategy: this.form.strategy,
+                    run_id: this.currentRunId,
+                    param_grid: param_grid,
+                    rebalance_frequencies: this.form.rebalance_frequencies,
+                    metric: this.form.metric,
+                    minimize: this.form.minimize === 'true',
+                    top_n: this.form.top_n,
+                    start_date: this.form.start_date,
+                    end_date: this.form.end_date || null,
+                    initial_capital: this.form.initial_capital,
+                    metric_basis: this.form.metric_basis,
+                    costs_pct: this.form.costs_pct / 100,
+                    tax_exemption: this.form.tax_exemption,
+                    tax_enabled: this.form.tax_enabled,
+                    drip_enabled: this.form.drip_enabled,
+                    skip_failed: this.form.skip_failed,
+                    execution_lag_days: this.form.execution_lag_days,
+                    max_volume_participation: this.form.max_volume_participation,
+                    min_daily_dollar_volume: this.form.min_daily_dollar_volume,
+                    liquidity_on_missing_volume: this.form.liquidity_on_missing_volume,
+                    max_position: this.form.max_position,
+                    turnover_budget: this.form.turnover_budget,
+                    sector_caps: sectorCaps,
+                    ticker_sectors: tickerSectors,
+                    drawdown_brake_threshold: this.form.drawdown_brake_threshold,
+                    drawdown_brake_cash_target: this.form.drawdown_brake_cash_target,
+                    drawdown_brake_release: this.form.drawdown_brake_release,
+                    enable_validation: true,
+                };
+
+                // Add walk-forward settings if enabled
+                if (this.form.walk_forward) {
+                    payload.walk_forward = true;
+                    payload.walk_forward_nested = this.form.walk_forward_nested;
+                    payload.wf_train_years = this.form.wf_train_years;
+                    payload.wf_test_years = this.form.wf_test_years;
+                    payload.wf_step_months = this.form.wf_step_months;
+                    payload.wf_anchored = this.form.wf_anchored;
+                    if (this.form.walk_forward_nested) {
+                        payload.wf_inner_train_years = this.form.wf_inner_train_years;
+                        payload.wf_inner_test_years = this.form.wf_inner_test_years;
+                        payload.wf_inner_step_months = this.form.wf_inner_step_months;
+                        payload.wf_inner_anchored = this.form.wf_inner_anchored;
+                    }
+                }
+
+                const response = await fetch('/api/v1/optimize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    let errorMsg = 'Optimization failed';
+                    try {
+                        const err = await response.json();
+                        if (typeof err.detail === 'string') {
+                            errorMsg = err.detail;
+                        } else if (err.detail && typeof err.detail === 'object') {
+                            errorMsg = JSON.stringify(err.detail);
+                        } else if (err.message) {
+                            errorMsg = err.message;
+                        }
+                    } catch (parseErr) {
+                        try {
+                            errorMsg = await response.text();
+                            if (errorMsg.length > 200) {
+                                errorMsg = errorMsg.substring(0, 200) + '...';
+                            }
+                        } catch {
+                            errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                        }
+                    }
+                    throw new Error(errorMsg);
+                }
+
+                this.result = await response.json();
+            } catch (e) {
+                this.error = e.message;
+            } finally {
+                this.loading = false;
+                this.stopTimer();
+                this.stopProgressPolling();
+            }
+        },
+
+        get progressSummary() {
+            if (!this.progressData) return 'Initializing optimization...';
+            if (this.progressData.status === 'pending') return 'Waiting for optimization to start...';
+            if (this.progressData.status === 'cancelling') return 'Cancelling optimization...';
+            if (this.progressData.status === 'cancelled') return 'Optimization cancelled';
+            return this.progressData.message || 'Running optimization...';
+        },
+
+        get progressDetail() {
+            if (!this.progressData) return '';
+            if (!this.progressData.total_runs) {
+                return 'Preparing optimization runs...';
+            }
+            const run = `${this.progressData.run_count}/${this.progressData.total_runs}`;
+            const eta = this.estimateEta(this.progressData.run_count, this.progressData.total_runs);
+            return `Iteration ${run}${eta ? ` · ETA ${eta}` : ''}`;
+        },
+
+        startProgressPolling(runId) {
+            this.progressData = null;
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+            }
+            const poll = async () => {
+                try {
+                    const response = await fetch(`/api/v1/optimize/progress/${runId}`);
+                    if (!response.ok) {
+                        return;
+                    }
+                    this.progressData = await response.json();
+                } catch {
+                    // Ignore polling errors while optimization is running
+                }
+            };
+            poll();
+            this.progressInterval = setInterval(poll, 1000);
+        },
+
+        stopProgressPolling() {
+            if (this.progressInterval) {
+                clearInterval(this.progressInterval);
+                this.progressInterval = null;
+            }
+        },
+
+        startTimer() {
+            this.elapsedSeconds = 0;
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+            }
+            this.elapsedTimer = setInterval(() => {
+                this.elapsedSeconds += 1;
+            }, 1000);
+        },
+
+        stopTimer() {
+            if (this.elapsedTimer) {
+                clearInterval(this.elapsedTimer);
+                this.elapsedTimer = null;
+            }
+        },
+
+        estimateEta(completed, total) {
+            const elapsed = this.elapsedSeconds;
+            if (!elapsed || !completed || !total || completed <= 0 || total <= 0 || completed >= total) {
+                return '';
+            }
+            const remaining = Math.ceil((elapsed * (total - completed)) / completed);
+            return formatDuration(remaining);
+        },
+
+        formatPct(value) {
+            if (value === null || value === undefined) return '-';
+            return (value * 100).toFixed(1) + '%';
+        },
+
+        formatNum(value, decimals = 2) {
+            if (value === null || value === undefined) return '-';
+            return value.toFixed(decimals);
+        },
+
+        formatMetricValue(value, metric) {
+            if (value === null || value === undefined) return '-';
+            if (['cagr', 'max_drawdown', 'volatility', 'total_return'].includes(metric)) {
+                return this.formatPct(value);
+            }
+            return this.formatNum(value, 3);
+        }
+    };
+}
+</script>
+{% endblock %}

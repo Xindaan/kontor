@@ -1,0 +1,202 @@
+from datetime import date
+
+import pandas as pd
+
+from strategies import LeveredETFMomentumStickyAdaptive as ExportedAdaptiveSticky
+from strategies.levered_etf_momentum_sticky import LeveredETFMomentumSticky
+from strategies.levered_etf_momentum_sticky_adaptive import LeveredETFMomentumStickyAdaptive
+
+
+def test_adaptive_sticky_is_exported_in_strategy_package():
+    assert ExportedAdaptiveSticky is LeveredETFMomentumStickyAdaptive
+
+
+def test_adaptive_matches_original_when_no_challengers_are_enabled():
+    original = LeveredETFMomentumSticky(
+        lookback_days=2,
+        switch_buffer=0.05,
+        min_hold_periods=1,
+        momentum_floor=0.0,
+    )
+    adaptive = LeveredETFMomentumStickyAdaptive(
+        challenger_map={},
+        lookback_days=2,
+        switch_buffer=0.05,
+        min_hold_periods=1,
+        momentum_floor=0.0,
+    )
+
+    data1 = pd.DataFrame(
+        {
+            "TQQQ": [100, 105, 110, 120, 130],
+            "UPRO": [100, 103, 106, 108, 110],
+            "SOXL": [100, 104, 108, 112, 116],
+            "TECL": [100, 102, 104, 107, 109],
+            "SPY": [100, 101, 102, 103, 104],
+        }
+    )
+    data2 = pd.DataFrame(
+        {
+            "TQQQ": [100, 105, 110, 120, 130, 134],
+            "UPRO": [100, 103, 106, 108, 110, 112],
+            "SOXL": [100, 104, 108, 112, 116, 118],
+            "TECL": [100, 102, 104, 107, 109, 113],
+            "SPY": [100, 101, 102, 103, 104, 105],
+        }
+    )
+    data3 = pd.DataFrame(
+        {
+            "TQQQ": [100, 105, 110, 120, 130, 134, 136],
+            "UPRO": [100, 103, 106, 108, 110, 112, 113],
+            "SOXL": [100, 104, 108, 112, 116, 118, 119],
+            "TECL": [100, 102, 104, 107, 109, 113, 128],
+            "SPY": [100, 101, 102, 103, 104, 105, 106],
+        }
+    )
+
+    for current_date, frame in [
+        (date(2026, 3, 25), data1),
+        (date(2026, 4, 25), data2),
+        (date(2026, 5, 25), data3),
+    ]:
+        assert adaptive.signal(current_date, frame).weights == original.signal(current_date, frame).weights
+
+
+def test_adaptive_challenger_allocates_to_3x_when_all_gates_pass():
+    strategy = LeveredETFMomentumStickyAdaptive(
+        challenger_map={"XLF": "FAS"},
+        lookback_days=2,
+        challenge_signal_short_days=2,
+        challenge_signal_long_days=4,
+        challenge_execution_days=2,
+        challenge_buffer=0.05,
+        carrier_momentum_days=6,
+        carrier_drawdown_lookback_days=4,
+        fallback_trend_days=6,
+        min_hold_periods=1,
+    )
+
+    data = pd.DataFrame(
+        {
+            "TQQQ": [100, 102, 104, 106, 108, 110, 112, 114],
+            "UPRO": [100, 101, 102, 103, 104, 105, 106, 107],
+            "SOXL": [100, 101, 103, 104, 105, 107, 108, 109],
+            "TECL": [100, 102, 103, 104, 105, 106, 107, 108],
+            "XLF": [100, 101, 103, 106, 110, 115, 120, 126],
+            "FAS": [100, 102, 105, 110, 118, 126, 138, 150],
+            "SPY": [100, 100, 101, 102, 103, 104, 105, 106],
+        }
+    )
+
+    signal = strategy.signal(date(2026, 3, 25), data)
+
+    assert signal.weights == {"FAS": 1.0}
+
+
+def test_adaptive_uses_1x_fallback_when_3x_carrier_fails_but_sector_trend_is_positive():
+    strategy = LeveredETFMomentumStickyAdaptive(
+        challenger_map={"XLF": "FAS"},
+        lookback_days=2,
+        challenge_signal_short_days=2,
+        challenge_signal_long_days=4,
+        challenge_execution_days=2,
+        challenge_buffer=0.05,
+        carrier_momentum_days=6,
+        carrier_drawdown_lookback_days=6,
+        carrier_drawdown_floor=-0.20,
+        fallback_trend_days=6,
+        min_hold_periods=1,
+    )
+
+    data = pd.DataFrame(
+        {
+            "TQQQ": [100, 102, 104, 106, 108, 110, 112, 114],
+            "UPRO": [100, 101, 102, 103, 104, 105, 106, 107],
+            "SOXL": [100, 101, 103, 104, 105, 107, 108, 109],
+            "TECL": [100, 102, 103, 104, 105, 106, 107, 108],
+            "XLF": [100, 102, 104, 106, 108, 110, 118, 126],
+            "FAS": [200, 180, 160, 140, 100, 110, 140, 160],
+            "SPY": [100, 100, 101, 102, 103, 104, 105, 106],
+        }
+    )
+
+    signal = strategy.signal(date(2026, 3, 25), data)
+
+    assert signal.weights == {"XLF": 1.0}
+
+
+def test_adaptive_falls_back_to_spy_when_challenger_is_strong_but_no_carrier_or_1x_trend_passes():
+    strategy = LeveredETFMomentumStickyAdaptive(
+        challenger_map={"XLF": "FAS"},
+        lookback_days=2,
+        challenge_signal_short_days=2,
+        challenge_signal_long_days=4,
+        challenge_execution_days=2,
+        challenge_buffer=0.05,
+        carrier_momentum_days=6,
+        carrier_drawdown_lookback_days=6,
+        carrier_drawdown_floor=-0.20,
+        fallback_trend_days=6,
+        min_hold_periods=1,
+    )
+
+    data = pd.DataFrame(
+        {
+            "TQQQ": [100, 102, 104, 106, 108, 110, 112, 114],
+            "UPRO": [100, 101, 102, 103, 104, 105, 106, 107],
+            "SOXL": [100, 101, 103, 104, 105, 107, 108, 109],
+            "TECL": [100, 102, 103, 104, 105, 106, 107, 108],
+            "XLF": [300, 200, 80, 90, 100, 110, 120, 130],
+            "FAS": [350, 250, 90, 80, 70, 90, 120, 160],
+            "SPY": [100, 100, 101, 102, 103, 104, 105, 106],
+        }
+    )
+
+    signal = strategy.signal(date(2026, 3, 25), data)
+
+    assert signal.weights == {"SPY": 1.0}
+
+
+def test_adaptive_sticky_state_is_tracked_on_actual_execution_asset():
+    strategy = LeveredETFMomentumStickyAdaptive(
+        challenger_map={"XLF": "FAS"},
+        lookback_days=2,
+        challenge_signal_short_days=2,
+        challenge_signal_long_days=4,
+        challenge_execution_days=2,
+        challenge_buffer=0.05,
+        carrier_momentum_days=6,
+        carrier_drawdown_lookback_days=6,
+        carrier_drawdown_floor=-0.20,
+        fallback_trend_days=6,
+        min_hold_periods=2,
+    )
+
+    first_data = pd.DataFrame(
+        {
+            "TQQQ": [100, 102, 104, 106, 108, 110, 112, 114],
+            "UPRO": [100, 101, 102, 103, 104, 105, 106, 107],
+            "SOXL": [100, 101, 103, 104, 105, 107, 108, 109],
+            "TECL": [100, 102, 103, 104, 105, 106, 107, 108],
+            "XLF": [100, 102, 104, 106, 108, 110, 118, 126],
+            "FAS": [200, 180, 160, 140, 100, 110, 140, 160],
+            "SPY": [100, 100, 101, 102, 103, 104, 105, 106],
+        }
+    )
+    second_data = pd.DataFrame(
+        {
+            "TQQQ": [100, 102, 104, 106, 108, 110, 112, 130, 150],
+            "UPRO": [100, 101, 102, 103, 104, 105, 106, 108, 110],
+            "SOXL": [100, 101, 103, 104, 105, 107, 108, 110, 112],
+            "TECL": [100, 102, 103, 104, 105, 106, 107, 109, 111],
+            "XLF": [100, 102, 104, 106, 108, 110, 118, 126, 128],
+            "FAS": [200, 180, 160, 140, 100, 110, 140, 160, 162],
+            "SPY": [100, 100, 101, 102, 103, 104, 105, 106, 107],
+        }
+    )
+
+    first_signal = strategy.signal(date(2026, 3, 25), first_data)
+    second_signal = strategy.signal(date(2026, 4, 25), second_data)
+
+    assert first_signal.weights == {"XLF": 1.0}
+    assert second_signal.weights == {"XLF": 1.0}
